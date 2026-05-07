@@ -25,17 +25,17 @@ enum class ModelVariant(
     val description: String
 ) {
     LITE(
-        filename = "gemma3-1b-it.task",
-        url = "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task",
-        displayName = "Gemma 3 1B (быстрая)",
-        sizeMb = 555,
+        filename = "qwen2.5-1.5b-instruct.task",
+        url = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+        displayName = "Qwen 2.5 1.5B (быстрая)",
+        sizeMb = 1700,
         description = "Лёгкая модель. Меньше памяти, быстрый отклик."
     ),
     POWERFUL(
-        filename = "gemma3-4b-it.task",
-        url = "https://huggingface.co/litert-community/Gemma3-4B-IT/resolve/main/Gemma3-4B-IT_multi-prefill-seq_q4_ekv2048.task",
-        displayName = "Gemma 3 4B (умная)",
-        sizeMb = 3100,
+        filename = "qwen2.5-3b-instruct.task",
+        url = "https://huggingface.co/litert-community/Qwen2.5-3B-Instruct/resolve/main/Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+        displayName = "Qwen 2.5 3B (умная)",
+        sizeMb = 3300,
         description = "Лучше держит роль DM. Требует больше памяти."
     )
 }
