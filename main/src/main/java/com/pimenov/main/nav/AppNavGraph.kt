@@ -12,9 +12,8 @@ import androidx.navigation.compose.rememberNavController
 import com.pimenov.character.presentation.CharacterCreationScreen
 import com.pimenov.feature.api.ModelDownloader
 import com.pimenov.game.presentation.GameScreen
-import com.pimenov.main.presentation.MainMenuScreen
+import com.pimenov.main.presentation.MainShell
 import com.pimenov.main.presentation.ModelDownloadScreen
-import com.pimenov.settings.presentation.SettingsScreen
 import org.koin.compose.koinInject
 
 @Composable
@@ -24,7 +23,7 @@ fun AppNavGraph() {
     var startRoute by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        startRoute = if (downloader.isModelPresent()) Routes.MAIN_MENU else Routes.MODEL_DOWNLOAD
+        startRoute = if (downloader.isModelPresent()) Routes.MAIN else Routes.MODEL_DOWNLOAD
     }
 
     val resolved = startRoute ?: return
@@ -33,29 +32,32 @@ fun AppNavGraph() {
         composable(Routes.MODEL_DOWNLOAD) {
             ModelDownloadScreen(
                 onDone = {
-                    navController.navigate(Routes.MAIN_MENU) {
-                        popUpTo(Routes.MODEL_DOWNLOAD) { inclusive = true }
+                    if (navController.previousBackStackEntry != null) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate(Routes.MAIN) {
+                            popUpTo(Routes.MODEL_DOWNLOAD) { inclusive = true }
+                        }
                     }
                 }
             )
         }
-        composable(Routes.MAIN_MENU) {
-            MainMenuScreen(
+        composable(Routes.MAIN) {
+            MainShell(
                 onNewGame = { navController.navigate(Routes.CHARACTER_CREATION) },
                 onContinue = { navController.navigate(Routes.GAME) },
-                onSettings = { navController.navigate(Routes.SETTINGS) }
+                onDownloadModel = { navController.navigate(Routes.MODEL_DOWNLOAD) }
             )
         }
         composable(Routes.CHARACTER_CREATION) {
             CharacterCreationScreen(
                 onCreated = {
                     navController.navigate(Routes.GAME) {
-                        popUpTo(Routes.MAIN_MENU)
+                        popUpTo(Routes.MAIN)
                     }
                 }
             )
         }
         composable(Routes.GAME) { GameScreen() }
-        composable(Routes.SETTINGS) { SettingsScreen(onBack = { navController.popBackStack() }) }
     }
 }

@@ -2,12 +2,14 @@ package com.pimenov.main.presentation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pimenov.feature.api.ModelVariant
 import com.pimenov.uikit.components.FantasyBackground
 import com.pimenov.uikit.components.GlassCard
 import com.pimenov.uikit.components.PrimaryActionButton
@@ -51,24 +54,40 @@ fun ModelDownloadScreen(
             )
             Spacer(Modifier.height(12.dp))
             GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         strRes("model_download_subtitle"),
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        strRes("model_pick_variant"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ModelVariant.entries.forEach { variant ->
+                            FilterChip(
+                                selected = state.selected == variant,
+                                onClick = { viewModel.selectVariant(variant) },
+                                enabled = !state.inProgress,
+                                label = { Text(variant.displayName) }
+                            )
+                        }
+                    }
+                    Text(
+                        text = "${state.selected.description}\n~${state.selected.sizeMb} МБ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     if (state.inProgress) {
                         LinearProgressIndicator(
                             progress = { state.progress },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(8.dp))
                         Text("${(state.progress * 100).toInt()}%")
                     }
                     state.error?.let {
                         Text("Ошибка: $it", color = MaterialTheme.colorScheme.tertiary)
                     }
-                    Spacer(Modifier.height(16.dp))
                     if (!state.inProgress) {
                         PrimaryActionButton(
                             label = if (state.error != null) strRes("model_download_retry")
@@ -76,9 +95,8 @@ fun ModelDownloadScreen(
                             onClick = viewModel::start,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(8.dp))
                         PrimaryActionButton(
-                            label = "Пропустить (использовать офлайн-режим)",
+                            label = strRes("model_download_skip"),
                             onClick = onDone,
                             modifier = Modifier.fillMaxWidth()
                         )

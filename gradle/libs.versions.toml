@@ -16,7 +16,7 @@ room = "2.7.0"
 koin = "4.0.0"
 koinCompose = "4.0.0"
 navigationCompose = "2.8.5"
-ksp = "2.3.21-1.0.34"
+ksp = "2.3.7"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
