@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Mythrix"
+rootProject.name = "Mythrix DND AI"
 include(":app")
 include(":core")
 include(":uikit")
