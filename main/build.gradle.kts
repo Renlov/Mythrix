@@ -32,4 +32,5 @@ dependencies {
     api(project(":game"))
     api(project(":settings"))
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.core.ktx)
 }

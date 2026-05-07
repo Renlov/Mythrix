@@ -42,4 +42,6 @@ dependencies {
     implementation(libs.mediapipe.tasks.genai)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.koin.android)
 }

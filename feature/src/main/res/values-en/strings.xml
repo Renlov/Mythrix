@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="download_channel_name">Model download</string>
+    <string name="download_channel_desc">Notifications about language model download</string>
+    <string name="download_notif_title">Downloading: %1$s</string>
+    <string name="download_notif_starting">Preparing…</string>
+    <string name="download_notif_progress">Downloaded %1$d%%</string>
+    <string name="download_notif_done">%1$s ready</string>
+    <string name="download_notif_done_text">Model downloaded. Ready to play.</string>
+    <string name="download_notif_failed">Download failed: %1$s</string>
+    <string name="download_notif_failed_text">Open the app and try again.</string>
+</resources>

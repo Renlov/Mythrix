@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="download_channel_name">Загрузка модели</string>
+    <string name="download_channel_desc">Уведомления о загрузке языковой модели</string>
+    <string name="download_notif_title">Скачивание: %1$s</string>
+    <string name="download_notif_starting">Подготовка…</string>
+    <string name="download_notif_progress">Загружено %1$d%%</string>
+    <string name="download_notif_done">%1$s готова</string>
+    <string name="download_notif_done_text">Модель скачана. Можно играть.</string>
+    <string name="download_notif_failed">Ошибка загрузки: %1$s</string>
+    <string name="download_notif_failed_text">Откройте приложение и попробуйте ещё раз.</string>
+</resources>

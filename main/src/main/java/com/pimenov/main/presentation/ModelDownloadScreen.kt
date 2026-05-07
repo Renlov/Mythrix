@@ -13,9 +13,15 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,7 +41,23 @@ fun ModelDownloadScreen(
     viewModel: ModelDownloadViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* result ignored — download proceeds either way */ viewModel.start() }
     LaunchedEffect(state.completed) { if (state.completed) onDone() }
+
+    fun requestStart() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (granted) viewModel.start()
+            else notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.start()
+        }
+    }
 
     FantasyBackground(tag = SceneTag.DUNGEON) {
         Column(
@@ -92,7 +114,7 @@ fun ModelDownloadScreen(
                         PrimaryActionButton(
                             label = if (state.error != null) strRes("model_download_retry")
                             else strRes("model_download_start"),
-                            onClick = viewModel::start,
+                            onClick = ::requestStart,
                             modifier = Modifier.fillMaxWidth()
                         )
                         PrimaryActionButton(
