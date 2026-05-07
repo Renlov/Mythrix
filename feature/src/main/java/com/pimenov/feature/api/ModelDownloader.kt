@@ -2,10 +2,12 @@ package com.pimenov.feature.api
 
 import android.content.Context
 import com.pimenov.core.dispatchers.AppDispatchers
+import com.pimenov.feature.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -64,12 +66,19 @@ class ModelDownloader(
         val target = fileFor(variant)
         target.parentFile?.mkdirs()
         try {
-            val connection = (URL(variant.url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 60_000
-                instanceFollowRedirects = true
-            }
+            val connection = openConnection(URL(variant.url))
             connection.connect()
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val msg = when (code) {
+                    401, 403 -> "Доступ к модели закрыт. Обратитесь к разработчику приложения."
+                    404 -> "Файл модели не найден на сервере."
+                    in 500..599 -> "Сервер недоступен. Попробуйте позже."
+                    else -> "Не удалось скачать модель (код $code)."
+                }
+                emit(DownloadEvent.Failed(IOException(msg)))
+                return@flow
+            }
             val total = connection.contentLengthLong.takeIf { it > 0 } ?: -1L
             val tmp = File(target.parentFile, "${target.name}.part")
             connection.inputStream.use { input ->
@@ -102,6 +111,37 @@ class ModelDownloader(
             emit(DownloadEvent.Failed(t))
         }
     }.flowOn(dispatchers.io)
+
+    /**
+     * Open a connection with manual redirect handling so the Authorization header
+     * (HuggingFace token) is preserved across hops to the CDN.
+     * HttpURLConnection drops the Authorization header on redirect by default,
+     * which causes 401s on HF download endpoints.
+     */
+    private fun openConnection(initial: URL, maxRedirects: Int = 5): HttpURLConnection {
+        var url = initial
+        var redirects = 0
+        while (true) {
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 60_000
+                instanceFollowRedirects = false
+                if (BuildConfig.HF_TOKEN.isNotEmpty()) {
+                    setRequestProperty("Authorization", "Bearer ${BuildConfig.HF_TOKEN}")
+                }
+                setRequestProperty("User-Agent", "Mythrix/1.0")
+            }
+            val code = conn.responseCode
+            if (code in 300..399 && redirects < maxRedirects) {
+                val location = conn.getHeaderField("Location") ?: return conn
+                conn.disconnect()
+                url = URL(url, location)
+                redirects++
+                continue
+            }
+            return conn
+        }
+    }
 
     fun delete(variant: ModelVariant): Boolean =
         fileFor(variant).takeIf { it.exists() }?.delete() ?: false
