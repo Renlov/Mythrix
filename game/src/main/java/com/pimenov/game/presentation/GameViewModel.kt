@@ -41,6 +41,8 @@ class GameViewModel(
     private val _state = MutableStateFlow(GameUiState())
     val state: StateFlow<GameUiState> = _state.asStateFlow()
 
+    @Volatile private var introScheduled: Boolean = false
+
     init {
         viewModelScope.launch {
             combine(
@@ -52,7 +54,8 @@ class GameViewModel(
                     _state.update {
                         it.copy(character = character, messages = messages, save = save)
                     }
-                    if (messages.isEmpty() && character != null) {
+                    if (messages.isEmpty() && character != null && !introScheduled) {
+                        introScheduled = true
                         sendIntro()
                     }
                 }
@@ -68,6 +71,7 @@ class GameViewModel(
                 )
             )
             streamFromDm("Начни приключение")
+            _state.update { it.copy(streamingDmText = "") }
         }
     }
 
