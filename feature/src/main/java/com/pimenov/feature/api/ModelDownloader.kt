@@ -15,20 +15,56 @@ sealed interface DownloadEvent {
     data class Failed(val error: Throwable) : DownloadEvent
 }
 
+enum class ModelVariant(
+    val filename: String,
+    val url: String,
+    val displayName: String,
+    val sizeMb: Int,
+    val description: String
+) {
+    LITE(
+        filename = "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        url = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        displayName = "Qwen 1.5B (быстрая)",
+        sizeMb = 1100,
+        description = "Лёгкая модель. Меньше памяти, быстрый отклик."
+    ),
+    POWERFUL(
+        filename = "qwen2.5-3b-instruct-q4_k_m.gguf",
+        url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+        displayName = "Qwen 3B (умная)",
+        sizeMb = 2100,
+        description = "Лучше держит роль DM. Требует больше памяти."
+    )
+}
+
 class ModelDownloader(
     private val context: Context,
     private val dispatchers: AppDispatchers
 ) {
+    private val modelsDir: File
+        get() = File(context.filesDir, "models").apply { mkdirs() }
+
+    fun fileFor(variant: ModelVariant): File = File(modelsDir, variant.filename)
+
+    fun isPresent(variant: ModelVariant): Boolean {
+        val f = fileFor(variant)
+        return f.exists() && f.length() > 1_000_000
+    }
+
+    fun installedVariant(): ModelVariant? =
+        ModelVariant.entries.firstOrNull { isPresent(it) }
+
+    fun isModelPresent(): Boolean = installedVariant() != null
+
     val modelFile: File
-        get() = File(context.filesDir, "models/$MODEL_FILENAME")
+        get() = installedVariant()?.let { fileFor(it) } ?: fileFor(ModelVariant.LITE)
 
-    fun isModelPresent(): Boolean = modelFile.exists() && modelFile.length() > 1_000_000
-
-    fun download(url: String = MODEL_URL): Flow<DownloadEvent> = flow {
-        val target = modelFile
+    fun download(variant: ModelVariant): Flow<DownloadEvent> = flow {
+        val target = fileFor(variant)
         target.parentFile?.mkdirs()
         try {
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            val connection = (URL(variant.url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout = 60_000
                 instanceFollowRedirects = true
@@ -67,11 +103,10 @@ class ModelDownloader(
         }
     }.flowOn(dispatchers.io)
 
-    fun delete(): Boolean = modelFile.takeIf { it.exists() }?.delete() ?: false
+    fun delete(variant: ModelVariant): Boolean =
+        fileFor(variant).takeIf { it.exists() }?.delete() ?: false
 
-    companion object {
-        const val MODEL_FILENAME = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-        const val MODEL_URL =
-            "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    fun deleteAll() {
+        ModelVariant.entries.forEach { delete(it) }
     }
 }

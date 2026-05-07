@@ -26,7 +26,8 @@ import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    onDownloadModel: (() -> Unit)? = null,
     viewModel: SettingsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -71,23 +72,40 @@ fun SettingsScreen(
             }
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        if (state.modelPresent) "Модель загружена" else "Модель не загружена",
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    val statusLabel = state.installedVariant?.let {
+                        "Установлено: ${it.displayName}"
+                    } ?: "Модель не загружена"
+                    Text(statusLabel, color = MaterialTheme.colorScheme.onSurface)
+
+                    if (!state.modelPresent && onDownloadModel != null) {
+                        PrimaryActionButton(
+                            label = strRes("settings_download_model"),
+                            onClick = onDownloadModel,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     PrimaryActionButton(
                         label = strRes("settings_delete_model"),
                         onClick = viewModel::deleteModel,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = state.modelPresent
                     )
+                    if (state.modelPresent && onDownloadModel != null) {
+                        PrimaryActionButton(
+                            label = strRes("settings_change_model"),
+                            onClick = onDownloadModel,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
-            PrimaryActionButton(
-                label = "Назад",
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (onBack != null) {
+                PrimaryActionButton(
+                    label = strRes("common_back"),
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
