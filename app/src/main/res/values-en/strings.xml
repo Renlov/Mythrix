@@ -18,6 +18,25 @@
     <string name="model_download_retry">Retry</string>
     <string name="model_download_done">Done</string>
     <string name="model_download_progress">%1$d%%</string>
+    <string name="model_download_skip">Skip (use offline mode)</string>
+    <string name="model_pick_variant">Pick AI model</string>
+
+    <string name="settings_download_model">Download model</string>
+    <string name="settings_change_model">Change model</string>
+    <string name="common_back">Back</string>
+
+    <string name="tab_plots">Plots</string>
+    <string name="tab_continue">Continue</string>
+    <string name="tab_heroes">Heroes</string>
+    <string name="tab_settings">Settings</string>
+
+    <string name="plots_default_title">Path of Shadows</string>
+    <string name="plots_default_summary">Starter chapter: tavern, forest, abandoned dungeon.</string>
+    <string name="plots_start">Start plot</string>
+    <string name="plots_more_soon">More plots coming soon…</string>
+    <string name="continue_no_save">No saves yet. Create a hero and start a game.</string>
+    <string name="heroes_empty">You have no heroes yet.</string>
+    <string name="heroes_create">Create hero</string>
 
     <string name="character_title">Create character</string>
     <string name="character_name">Name</string>

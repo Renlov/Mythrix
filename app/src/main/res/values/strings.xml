@@ -18,6 +18,25 @@
     <string name="model_download_retry">Повторить</string>
     <string name="model_download_done">Готово</string>
     <string name="model_download_progress">%1$d%%</string>
+    <string name="model_download_skip">Пропустить (использовать офлайн-режим)</string>
+    <string name="model_pick_variant">Выберите модель ИИ</string>
+
+    <string name="settings_download_model">Скачать модель</string>
+    <string name="settings_change_model">Сменить модель</string>
+    <string name="common_back">Назад</string>
+
+    <string name="tab_plots">Сюжеты</string>
+    <string name="tab_continue">Продолжить</string>
+    <string name="tab_heroes">Герои</string>
+    <string name="tab_settings">Настройки</string>
+
+    <string name="plots_default_title">Тропа теней</string>
+    <string name="plots_default_summary">Стартовая глава: таверна, лес, заброшенное подземелье.</string>
+    <string name="plots_start">Начать сюжет</string>
+    <string name="plots_more_soon">Новые сюжеты скоро…</string>
+    <string name="continue_no_save">Сохранений нет. Создайте героя и начните игру.</string>
+    <string name="heroes_empty">У вас ещё нет героев.</string>
+    <string name="heroes_create">Создать героя</string>
 
     <string name="character_title">Создание персонажа</string>
     <string name="character_name">Имя</string>

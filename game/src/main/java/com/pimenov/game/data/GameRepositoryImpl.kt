@@ -6,6 +6,7 @@ import com.pimenov.game.api.GameRepository
 import com.pimenov.game.api.GameSave
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 class GameRepositoryImpl(
