@@ -92,17 +92,47 @@ class GameViewModel(
         viewModelScope.launch {
             val save = gameRepo.loadState()
             val stage = save?.let { Plot.stageAt(it.stageIndex) }
-            val intro = if (stage != null) {
-                "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size}: ${stage.title}\n${stage.situation}"
+            if (stage != null) {
+                gameRepo.appendMessage(
+                    ChatMessage(
+                        author = MessageAuthor.SYSTEM,
+                        content = "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size}: ${stage.title}"
+                    )
+                )
+                // DM speaks first — guaranteed, regardless of LLM availability.
+                gameRepo.appendMessage(
+                    ChatMessage(
+                        author = MessageAuthor.DM,
+                        content = buildIntroNarration(stage)
+                    )
+                )
             } else {
-                "Приключение начинается."
+                gameRepo.appendMessage(
+                    ChatMessage(
+                        author = MessageAuthor.SYSTEM,
+                        content = "Приключение начинается."
+                    )
+                )
             }
-            gameRepo.appendMessage(
-                ChatMessage(author = MessageAuthor.SYSTEM, content = intro)
-            )
-            streamFromDm("Опиши сцену и предложи мне действие")
-            _state.update { it.copy(streamingDmText = "") }
         }
+    }
+
+    private fun buildIntroNarration(stage: Plot.Stage): String {
+        val sb = StringBuilder()
+        sb.append(stage.situation)
+        stage.encounter?.let { enc ->
+            sb.append("\n\n")
+            sb.append(enc.description)
+            when (enc.stance) {
+                Plot.Stance.RECRUITABLE ->
+                    sb.append(" Похоже, ${enc.name.split(' ').first()} может пойти с тобой — стоит попробовать.")
+                Plot.Stance.HOSTILE ->
+                    sb.append(" Это враг. Готовься к бою.")
+                Plot.Stance.NEUTRAL -> Unit
+            }
+        }
+        sb.append("\n\nЧто будешь делать?")
+        return sb.toString()
     }
 
     fun onInput(value: String) = _state.update { it.copy(input = value) }

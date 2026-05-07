@@ -73,10 +73,35 @@ class AdvancePlotUseCase(private val repo: GameRepository) {
         repo.appendMessage(
             ChatMessage(
                 author = MessageAuthor.SYSTEM,
-                content = "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size}: ${stage.title}\n${stage.situation}"
+                content = "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size}: ${stage.title}"
+            )
+        )
+        repo.appendMessage(
+            ChatMessage(
+                author = MessageAuthor.DM,
+                content = buildStageNarration(stage)
             )
         )
         return updated
+    }
+
+    private fun buildStageNarration(stage: Plot.Stage): String {
+        val sb = StringBuilder()
+        sb.append(stage.situation)
+        stage.encounter?.let { enc ->
+            sb.append("\n\n")
+            sb.append(enc.description)
+            when (enc.stance) {
+                Plot.Stance.RECRUITABLE ->
+                    sb.append(" Можно попробовать завербовать.")
+                Plot.Stance.HOSTILE ->
+                    sb.append(" Готовься к бою.")
+                Plot.Stance.NEUTRAL -> Unit
+            }
+        }
+        if (stage.isFinale) sb.append("\n\nЭто финальный бой.")
+        sb.append("\n\nЧто будешь делать?")
+        return sb.toString()
     }
 }
 
