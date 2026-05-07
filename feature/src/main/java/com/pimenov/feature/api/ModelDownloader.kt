@@ -25,18 +25,18 @@ enum class ModelVariant(
     val description: String
 ) {
     LITE(
-        filename = "qwen2.5-1.5b-instruct.task",
-        url = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
-        displayName = "Qwen 2.5 1.5B (быстрая)",
-        sizeMb = 1700,
-        description = "Лёгкая модель. Меньше памяти, быстрый отклик."
+        filename = "qwen2.5-0.5b-instruct.task",
+        url = "https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+        displayName = "Qwen 2.5 0.5B (быстрая)",
+        sizeMb = 560,
+        description = "Самая лёгкая модель. Запустится почти на любом телефоне."
     ),
     POWERFUL(
-        filename = "qwen2.5-3b-instruct.task",
-        url = "https://huggingface.co/litert-community/Qwen2.5-3B-Instruct/resolve/main/Qwen2.5-3B-Instruct_multi-prefill-seq_q8_ekv1280.task",
-        displayName = "Qwen 2.5 3B (умная)",
-        sizeMb = 3300,
-        description = "Лучше держит роль DM. Требует больше памяти."
+        filename = "qwen2.5-1.5b-instruct.task",
+        url = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+        displayName = "Qwen 2.5 1.5B (умная)",
+        sizeMb = 1700,
+        description = "Лучше держит роль DM. Нужно больше памяти."
     )
 }
 

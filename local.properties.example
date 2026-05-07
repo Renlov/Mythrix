@@ -4,12 +4,8 @@
 # Android SDK location (required for builds)
 sdk.dir=/Users/yourname/Library/Android/sdk
 
-# HuggingFace access token for downloading license-gated models (Gemma).
-# Steps:
-#   1. Go to https://huggingface.co/settings/tokens and create a "Read" token.
-#   2. Visit https://huggingface.co/litert-community/Gemma3-1B-IT
-#      and accept the Google Gemma license once.
-#   3. Paste the token here. Format: hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# After this, end users of the app just press "Download" — license/auth is handled
-# transparently via the bundled token.
+# OPTIONAL: HuggingFace access token.
+# Default Qwen 2.5 models are PUBLIC — no token needed, end users just press Download.
+# Set this only if you switch ModelDownloader URLs to license-gated models (e.g. Gemma).
+# Get a token: https://huggingface.co/settings/tokens (type: Read)
 hf.token=
