@@ -1,5 +1,6 @@
 package com.pimenov.character.presentation
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
@@ -41,6 +44,13 @@ fun CharacterCreationScreen(
     LaunchedEffect(state.created) { state.created?.let { onCreated(it.id) } }
 
     FantasyBackground(tag = SceneTag.TAVERN) {
+        Image(
+            painter = painterResource(com.pimenov.uikit.R.drawable.bg_tavern),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            alpha = 0.55f
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()

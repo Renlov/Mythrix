@@ -66,4 +66,15 @@
     <string name="dice_d8">d8</string>
 
     <string name="loading">Loading…</string>
+
+    <string name="quick_look">Look around</string>
+    <string name="quick_look_text">I look around and describe what I see.</string>
+    <string name="quick_talk">Talk</string>
+    <string name="quick_talk_text">I try to talk to the nearest creature.</string>
+    <string name="quick_search">Search</string>
+    <string name="quick_search_text">I carefully search the area for anything valuable.</string>
+    <string name="quick_rest">Rest</string>
+    <string name="quick_rest_text">I take a short rest to recover my strength.</string>
+    <string name="quick_sneak">Sneak</string>
+    <string name="quick_sneak_text">I move silently, trying to sneak unnoticed.</string>
 </resources>

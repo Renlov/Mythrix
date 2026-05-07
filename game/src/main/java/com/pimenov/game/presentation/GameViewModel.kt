@@ -76,7 +76,22 @@ class GameViewModel(
     fun send() {
         val text = _state.value.input.trim()
         if (text.isEmpty() || _state.value.isSending) return
-        _state.update { it.copy(input = "", isSending = true, streamingDmText = "") }
+        dispatch(text, clearInput = true)
+    }
+
+    fun sendQuick(text: String) {
+        if (text.isBlank() || _state.value.isSending) return
+        dispatch(text, clearInput = false)
+    }
+
+    private fun dispatch(text: String, clearInput: Boolean) {
+        _state.update {
+            it.copy(
+                input = if (clearInput) "" else it.input,
+                isSending = true,
+                streamingDmText = ""
+            )
+        }
         viewModelScope.launch {
             streamFromDm(text)
             _state.update { it.copy(isSending = false, streamingDmText = "") }

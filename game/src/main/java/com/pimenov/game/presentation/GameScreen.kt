@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,7 +33,6 @@ import com.pimenov.uikit.components.DiceButton
 import com.pimenov.uikit.components.FantasyBackground
 import com.pimenov.uikit.components.GlassCard
 import com.pimenov.uikit.components.PrimaryActionButton
-import com.pimenov.uikit.components.SceneTag
 import com.pimenov.uikit.components.sceneTagFrom
 import org.koin.androidx.compose.koinViewModel
 
@@ -60,15 +61,22 @@ fun GameScreen(viewModel: GameViewModel = koinViewModel()) {
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     items(state.messages, key = { it.id }) { msg -> Message(msg) }
-                    if (state.streamingDmText.isNotEmpty()) {
+                    val last = state.messages.lastOrNull()
+                    val showStreaming = state.streamingDmText.isNotEmpty() &&
+                        !(last?.author == MessageAuthor.DM && last.content == state.streamingDmText)
+                    if (showStreaming) {
                         item {
                             ChatBubble(text = state.streamingDmText, author = BubbleAuthor.DM)
                         }
                     }
                 }
             }
-            DiceTray(viewModel)
-            if (state.save?.combat != null) CombatActions(viewModel)
+            if (state.save?.combat != null) {
+                DiceTray(viewModel)
+                CombatActions(viewModel)
+            } else {
+                QuickActions(onSend = viewModel::sendQuick, enabled = !state.isSending)
+            }
             InputRow(state.input, viewModel::onInput, viewModel::send, state.isSending)
         }
     }
@@ -126,6 +134,29 @@ private fun CombatActions(vm: GameViewModel) {
         PrimaryActionButton(label = strRes("game_attack"), onClick = vm::attack, modifier = Modifier.weight(1f))
         PrimaryActionButton(label = strRes("game_dodge"), onClick = vm::dodge, modifier = Modifier.weight(1f))
         PrimaryActionButton(label = strRes("game_cast"), onClick = vm::cast, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun QuickActions(onSend: (String) -> Unit, enabled: Boolean) {
+    val actions = listOf(
+        strRes("quick_look") to strRes("quick_look_text"),
+        strRes("quick_talk") to strRes("quick_talk_text"),
+        strRes("quick_search") to strRes("quick_search_text"),
+        strRes("quick_rest") to strRes("quick_rest_text"),
+        strRes("quick_sneak") to strRes("quick_sneak_text")
+    )
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(actions) { (label, text) ->
+            AssistChip(
+                onClick = { if (enabled) onSend(text) },
+                label = { Text(label) },
+                enabled = enabled
+            )
+        }
     }
 }
 

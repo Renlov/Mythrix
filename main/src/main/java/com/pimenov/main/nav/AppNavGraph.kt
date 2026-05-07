@@ -52,9 +52,7 @@ fun AppNavGraph() {
         composable(Routes.CHARACTER_CREATION) {
             CharacterCreationScreen(
                 onCreated = {
-                    navController.navigate(Routes.GAME) {
-                        popUpTo(Routes.MAIN)
-                    }
+                    navController.popBackStack(Routes.MAIN, inclusive = false)
                 }
             )
         }

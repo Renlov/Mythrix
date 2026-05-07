@@ -66,4 +66,15 @@
     <string name="dice_d8">d8</string>
 
     <string name="loading">Загрузка…</string>
+
+    <string name="quick_look">Осмотреться</string>
+    <string name="quick_look_text">Осматриваюсь вокруг и описываю, что вижу.</string>
+    <string name="quick_talk">Заговорить</string>
+    <string name="quick_talk_text">Пытаюсь заговорить с ближайшим существом.</string>
+    <string name="quick_search">Обыскать</string>
+    <string name="quick_search_text">Внимательно обыскиваю помещение в поисках чего-либо ценного.</string>
+    <string name="quick_rest">Отдохнуть</string>
+    <string name="quick_rest_text">Делаю короткий привал, чтобы восстановить силы.</string>
+    <string name="quick_sneak">Подкрасться</string>
+    <string name="quick_sneak_text">Двигаюсь бесшумно, пытаясь подкрасться незамеченным.</string>
 </resources>
