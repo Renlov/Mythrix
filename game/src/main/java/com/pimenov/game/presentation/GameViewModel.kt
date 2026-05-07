@@ -16,9 +16,13 @@ import com.pimenov.game.domain.StartCombatUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 data class GameUiState(
     val character: CharacterSheet? = null,
@@ -43,22 +47,37 @@ class GameViewModel(
 
     @Volatile private var introScheduled: Boolean = false
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     init {
+        // Load the character bound to the current save.
+        // Falls back to "latest created" only if the save has no characterId yet.
         viewModelScope.launch {
-            combine(
-                characterRepo.observeLatest(),
-                gameRepo.observeMessages(),
-                gameRepo.observeState()
-            ) { character, messages, save -> Triple(character, messages, save) }
-                .collect { (character, messages, save) ->
-                    _state.update {
-                        it.copy(character = character, messages = messages, save = save)
-                    }
-                    if (messages.isEmpty() && character != null && !introScheduled) {
-                        introScheduled = true
-                        sendIntro()
+            gameRepo.observeState()
+                .map { it?.characterId }
+                .distinctUntilChanged()
+                .flatMapLatest { id ->
+                    when {
+                        id == null -> characterRepo.observeLatest()
+                        id == 0L -> characterRepo.observeLatest()
+                        else -> flowOf(characterRepo.byId(id))
                     }
                 }
+                .collect { ch -> _state.update { it.copy(character = ch) } }
+        }
+        viewModelScope.launch {
+            gameRepo.observeMessages().collect { messages ->
+                _state.update { it.copy(messages = messages) }
+                val character = _state.value.character
+                if (messages.isEmpty() && character != null && !introScheduled) {
+                    introScheduled = true
+                    sendIntro()
+                }
+            }
+        }
+        viewModelScope.launch {
+            gameRepo.observeState().collect { save ->
+                _state.update { it.copy(save = save) }
+            }
         }
     }
 

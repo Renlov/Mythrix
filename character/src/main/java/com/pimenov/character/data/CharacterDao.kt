@@ -14,6 +14,9 @@ interface CharacterDao {
     @Query("SELECT * FROM characters ORDER BY id DESC LIMIT 1")
     fun observeLatest(): Flow<CharacterEntity?>
 
+    @Query("SELECT * FROM characters ORDER BY id DESC")
+    fun observeAll(): Flow<List<CharacterEntity>>
+
     @Query("SELECT * FROM characters WHERE id = :id")
     suspend fun byId(id: Long): CharacterEntity?
 

@@ -14,5 +14,8 @@ class CharacterRepositoryImpl(private val dao: CharacterDao) : CharacterReposito
     override fun observeLatest(): Flow<CharacterSheet?> =
         dao.observeLatest().map { it?.toDomain() }
 
+    override fun observeAll(): Flow<List<CharacterSheet>> =
+        dao.observeAll().map { list -> list.map { it.toDomain() } }
+
     override suspend fun clear() = dao.clear()
 }

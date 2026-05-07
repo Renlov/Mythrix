@@ -44,8 +44,8 @@ fun AppNavGraph() {
         }
         composable(Routes.MAIN) {
             MainShell(
-                onNewGame = { navController.navigate(Routes.CHARACTER_CREATION) },
-                onContinue = { navController.navigate(Routes.GAME) },
+                onCreateHero = { navController.navigate(Routes.CHARACTER_CREATION) },
+                onStartGame = { navController.navigate(Routes.GAME) },
                 onDownloadModel = { navController.navigate(Routes.MODEL_DOWNLOAD) }
             )
         }

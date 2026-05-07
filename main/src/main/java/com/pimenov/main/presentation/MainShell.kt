@@ -1,5 +1,6 @@
 package com.pimenov.main.presentation
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,17 +9,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -28,18 +35,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.character.api.CharacterRepository
+import com.pimenov.character.api.CharacterSheet
 import com.pimenov.game.api.GameRepository
+import com.pimenov.game.api.GameSave
 import com.pimenov.settings.presentation.SettingsScreen
 import com.pimenov.uikit.components.FantasyBackground
 import com.pimenov.uikit.components.GlassCard
 import com.pimenov.uikit.components.PrimaryActionButton
 import com.pimenov.uikit.components.SceneTag
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 @Composable
 fun MainShell(
-    onNewGame: () -> Unit,
-    onContinue: () -> Unit,
+    onCreateHero: () -> Unit,
+    onStartGame: () -> Unit,
     onDownloadModel: () -> Unit
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -75,17 +85,28 @@ fun MainShell(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> PlotsTab(onNewGame)
-                1 -> ContinueTab(onContinue, onNewGame)
-                2 -> HeroesTab(onNewGame)
+                0 -> PlotsTab(
+                    onStartGame = onStartGame,
+                    onCreateHero = { tab = 2 }
+                )
+                1 -> ContinueTab(onContinue = onStartGame)
+                2 -> HeroesTab(onCreateHero = onCreateHero)
                 else -> SettingsScreen(onBack = null, onDownloadModel = onDownloadModel)
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlotsTab(onNewGame: () -> Unit) {
+private fun PlotsTab(onStartGame: () -> Unit, onCreateHero: () -> Unit) {
+    val characterRepo: CharacterRepository = koinInject()
+    val gameRepo: GameRepository = koinInject()
+    val heroes by characterRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    val scope = rememberCoroutineScope()
+    var sheetOpen by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+
     FantasyBackground(tag = SceneTag.FOREST) {
         Column(
             modifier = Modifier
@@ -109,9 +130,18 @@ private fun PlotsTab(onNewGame: () -> Unit) {
                     )
                     PrimaryActionButton(
                         label = strRes("plots_start"),
-                        onClick = onNewGame,
+                        onClick = {
+                            if (heroes.isEmpty()) onCreateHero() else sheetOpen = true
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (heroes.isEmpty()) {
+                        Text(
+                            strRes("plots_create_hero_first"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -122,10 +152,65 @@ private fun PlotsTab(onNewGame: () -> Unit) {
             }
         }
     }
+
+    if (sheetOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { sheetOpen = false },
+            sheetState = sheetState
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    strRes("plots_pick_hero"),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(Modifier.height(12.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(heroes, key = { it.id }) { hero ->
+                        HeroRow(
+                            hero = hero,
+                            onClick = {
+                                scope.launch {
+                                    // Fresh save bound to the picked hero — wipes old chat for a new run.
+                                    gameRepo.clearAll()
+                                    gameRepo.saveState(
+                                        GameSave(
+                                            characterId = hero.id,
+                                            sceneTag = "tavern"
+                                        )
+                                    )
+                                    sheetOpen = false
+                                    onStartGame()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun ContinueTab(onContinue: () -> Unit, onNewGame: () -> Unit) {
+private fun HeroRow(hero: CharacterSheet, onClick: () -> Unit) {
+    GlassCard(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
+        Column {
+            Text(
+                hero.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Text(
+                "${localizedRace(hero.race.name)} • ${localizedClass(hero.charClass.name)} • HP ${hero.maxHp} AC ${hero.ac}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContinueTab(onContinue: () -> Unit) {
     val gameRepo: GameRepository = koinInject()
     var hasSave by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { hasSave = gameRepo.loadState() != null }
@@ -156,21 +241,15 @@ private fun ContinueTab(onContinue: () -> Unit, onNewGame: () -> Unit) {
                     strRes("continue_no_save"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(12.dp))
-                PrimaryActionButton(
-                    label = strRes("menu_new_game"),
-                    onClick = onNewGame,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }
 }
 
 @Composable
-private fun HeroesTab(onNewGame: () -> Unit) {
+private fun HeroesTab(onCreateHero: () -> Unit) {
     val characterRepo: CharacterRepository = koinInject()
-    val latest by characterRepo.observeLatest().collectAsStateWithLifecycle(initialValue = null)
+    val heroes by characterRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
 
     FantasyBackground(tag = SceneTag.DUNGEON) {
         Column(
@@ -185,35 +264,41 @@ private fun HeroesTab(onNewGame: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.secondary
             )
-            val current = latest
-            if (current == null) {
+            if (heroes.isEmpty()) {
                 Text(
                     strRes("heroes_empty"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        Text(
-                            current.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            "${current.race.name} • ${current.charClass.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(heroes, key = { it.id }) { hero -> HeroRow(hero = hero, onClick = {}) }
                 }
             }
             PrimaryActionButton(
                 label = strRes("heroes_create"),
-                onClick = onNewGame,
+                onClick = onCreateHero,
                 modifier = Modifier.fillMaxWidth()
             )
         }
     }
+}
+
+@Composable
+private fun localizedRace(raw: String): String = when (raw) {
+    "HUMAN" -> strRes("race_human")
+    "ELF" -> strRes("race_elf")
+    "DWARF" -> strRes("race_dwarf")
+    "HALFLING" -> strRes("race_halfling")
+    else -> raw
+}
+
+@Composable
+private fun localizedClass(raw: String): String = when (raw) {
+    "FIGHTER" -> strRes("class_fighter")
+    "ROGUE" -> strRes("class_rogue")
+    "WIZARD" -> strRes("class_wizard")
+    "CLERIC" -> strRes("class_cleric")
+    else -> raw
 }
 
 @Composable

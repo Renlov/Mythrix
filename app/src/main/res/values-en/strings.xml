@@ -37,6 +37,8 @@
     <string name="continue_no_save">No saves yet. Create a hero and start a game.</string>
     <string name="heroes_empty">You have no heroes yet.</string>
     <string name="heroes_create">Create hero</string>
+    <string name="plots_pick_hero">Choose your hero</string>
+    <string name="plots_create_hero_first">Create a hero in the Heroes tab first.</string>
 
     <string name="character_title">Create character</string>
     <string name="character_name">Name</string>

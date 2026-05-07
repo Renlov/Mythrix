@@ -37,6 +37,8 @@
     <string name="continue_no_save">Сохранений нет. Создайте героя и начните игру.</string>
     <string name="heroes_empty">У вас ещё нет героев.</string>
     <string name="heroes_create">Создать героя</string>
+    <string name="plots_pick_hero">Выберите героя</string>
+    <string name="plots_create_hero_first">Сначала создайте героя на вкладке «Герои».</string>
 
     <string name="character_title">Создание персонажа</string>
     <string name="character_name">Имя</string>

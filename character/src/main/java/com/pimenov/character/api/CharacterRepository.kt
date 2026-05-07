@@ -6,5 +6,6 @@ interface CharacterRepository {
     suspend fun save(sheet: CharacterSheet): Long
     suspend fun byId(id: Long): CharacterSheet?
     fun observeLatest(): Flow<CharacterSheet?>
+    fun observeAll(): Flow<List<CharacterSheet>>
     suspend fun clear()
 }
