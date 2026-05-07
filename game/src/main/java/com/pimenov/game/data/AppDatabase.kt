@@ -9,7 +9,7 @@ import com.pimenov.character.data.CharacterEntity
 
 @Database(
     entities = [CharacterEntity::class, GameSaveEntity::class, ChatMessageEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

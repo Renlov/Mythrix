@@ -9,6 +9,9 @@ import com.pimenov.game.api.Enemy
 import com.pimenov.game.api.GameRepository
 import com.pimenov.game.api.GameSave
 import com.pimenov.game.api.MessageAuthor
+import com.pimenov.game.api.Plot
+import com.pimenov.game.domain.AdvancePlotUseCase
+import com.pimenov.game.domain.RecruitCompanionUseCase
 import com.pimenov.game.domain.ResolveAttackUseCase
 import com.pimenov.game.domain.RollDiceUseCase
 import com.pimenov.game.domain.SendPlayerMessageUseCase
@@ -33,21 +36,25 @@ data class GameUiState(
     val input: String = ""
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class GameViewModel(
     private val gameRepo: GameRepository,
     private val characterRepo: CharacterRepository,
     private val sendMessage: SendPlayerMessageUseCase,
     private val rollDice: RollDiceUseCase,
     private val startCombat: StartCombatUseCase,
-    private val resolveAttack: ResolveAttackUseCase
+    private val resolveAttack: ResolveAttackUseCase,
+    private val advancePlot: AdvancePlotUseCase,
+    private val recruit: RecruitCompanionUseCase
 ) : ViewModel() {
+
+    val currentStage: Plot.Stage?
+        get() = _state.value.save?.let { Plot.stageAt(it.stageIndex) }
 
     private val _state = MutableStateFlow(GameUiState())
     val state: StateFlow<GameUiState> = _state.asStateFlow()
 
     @Volatile private var introScheduled: Boolean = false
-
-    @OptIn(ExperimentalCoroutinesApi::class)
     init {
         // Load the character bound to the current save.
         // Falls back to "latest created" only if the save has no characterId yet.
@@ -83,13 +90,17 @@ class GameViewModel(
 
     private fun sendIntro() {
         viewModelScope.launch {
+            val save = gameRepo.loadState()
+            val stage = save?.let { Plot.stageAt(it.stageIndex) }
+            val intro = if (stage != null) {
+                "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size}: ${stage.title}\n${stage.situation}"
+            } else {
+                "Приключение начинается."
+            }
             gameRepo.appendMessage(
-                ChatMessage(
-                    author = MessageAuthor.SYSTEM,
-                    content = "Приключение начинается."
-                )
+                ChatMessage(author = MessageAuthor.SYSTEM, content = intro)
             )
-            streamFromDm("Начни приключение")
+            streamFromDm("Опиши сцену и предложи мне действие")
             _state.update { it.copy(streamingDmText = "") }
         }
     }
@@ -139,22 +150,12 @@ class GameViewModel(
         }
     }
 
-    fun beginSampleCombat() {
-        val save = _state.value.save ?: GameSave(
-            characterId = _state.value.character?.id ?: 0L,
-            sceneTag = "dungeon"
-        )
-        viewModelScope.launch {
-            val enemy = Enemy(
-                name = "Гоблин",
-                maxHp = 8,
-                currentHp = 8,
-                ac = 12,
-                attackBonus = 3,
-                damageDie = 6
-            )
-            startCombat(save, enemy)
-        }
+    /** Start combat with the current stage's hostile NPC, if any. */
+    fun engageStageEnemy() {
+        val save = _state.value.save ?: return
+        val stage = Plot.stageAt(save.stageIndex)
+        val enemy = stage.encounter?.enemy ?: return
+        viewModelScope.launch { startCombat(save, enemy) }
     }
 
     fun attack() {
@@ -175,11 +176,40 @@ class GameViewModel(
                 )
             )
             if (result.ended) {
-                gameRepo.saveState(save.copy(combat = null))
+                val stage = Plot.stageAt(save.stageIndex)
+                val princessSaved = save.princessSaved ||
+                    (stage.isFinale && result.playerWon)
+                gameRepo.saveState(save.copy(combat = null, princessSaved = princessSaved))
+                if (princessSaved && !save.princessSaved) {
+                    gameRepo.appendMessage(
+                        ChatMessage(
+                            author = MessageAuthor.SYSTEM,
+                            content = "Принцесса Алинара спасена! Драгоценная победа."
+                        )
+                    )
+                }
             }
         }
     }
 
     fun dodge() = appendSystem("Вы готовитесь к защите. AC до конца хода +2.")
     fun cast() = appendSystem("Вы творите заклинание. Брось d8 для урона.")
+
+    fun advanceStage() {
+        viewModelScope.launch { advancePlot() }
+    }
+
+    fun recruitCurrent() {
+        viewModelScope.launch {
+            val ok = recruit()
+            if (!ok) {
+                gameRepo.appendMessage(
+                    ChatMessage(
+                        author = MessageAuthor.SYSTEM,
+                        content = "Сейчас никого нельзя завербовать."
+                    )
+                )
+            }
+        }
+    }
 }

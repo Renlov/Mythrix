@@ -6,7 +6,9 @@ import com.pimenov.game.data.AppDatabase
 import com.pimenov.game.data.ChatMessageDao
 import com.pimenov.game.data.GameRepositoryImpl
 import com.pimenov.game.data.GameSaveDao
+import com.pimenov.game.domain.AdvancePlotUseCase
 import com.pimenov.game.domain.LoadSaveUseCase
+import com.pimenov.game.domain.RecruitCompanionUseCase
 import com.pimenov.game.domain.ResolveAttackUseCase
 import com.pimenov.game.domain.RollDiceUseCase
 import com.pimenov.game.domain.SaveGameUseCase
@@ -32,6 +34,19 @@ fun gameModule() = module {
     factory { ResolveAttackUseCase(get()) }
     factory { LoadSaveUseCase(get()) }
     factory { SaveGameUseCase(get()) }
+    factory { AdvancePlotUseCase(get()) }
+    factory { RecruitCompanionUseCase(get()) }
 
-    viewModel { GameViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel {
+        GameViewModel(
+            gameRepo = get(),
+            characterRepo = get(),
+            sendMessage = get(),
+            rollDice = get(),
+            startCombat = get(),
+            resolveAttack = get(),
+            advancePlot = get(),
+            recruit = get()
+        )
+    }
 }

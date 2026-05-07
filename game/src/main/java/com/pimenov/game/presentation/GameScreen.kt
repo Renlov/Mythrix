@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.game.api.ChatMessage
 import com.pimenov.game.api.MessageAuthor
+import com.pimenov.game.api.Plot
 import com.pimenov.uikit.components.BubbleAuthor
 import com.pimenov.uikit.components.ChatBubble
 import com.pimenov.uikit.components.DiceButton
@@ -53,6 +54,7 @@ fun GameScreen(viewModel: GameViewModel = koinViewModel()) {
                 .systemBarsPadding()
                 .padding(8.dp)
         ) {
+            PlotHud(state)
             CombatHud(state)
             Box(modifier = Modifier.weight(1f)) {
                 LazyColumn(
@@ -75,6 +77,7 @@ fun GameScreen(viewModel: GameViewModel = koinViewModel()) {
                 DiceTray(viewModel)
                 CombatActions(viewModel)
             } else {
+                PlotActions(state, viewModel)
                 QuickActions(onSend = viewModel::sendQuick, enabled = !state.isSending)
             }
             InputRow(state.input, viewModel::onInput, viewModel::send, state.isSending)
@@ -90,6 +93,68 @@ private fun Message(message: ChatMessage) {
         MessageAuthor.SYSTEM -> BubbleAuthor.SYSTEM
     }
     ChatBubble(text = message.content, author = author)
+}
+
+@Composable
+private fun PlotHud(state: GameUiState) {
+    val save = state.save ?: return
+    val stage = Plot.stageAt(save.stageIndex)
+    GlassCard(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+        Column {
+            Text(
+                "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size} • ${stage.title}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            if (save.companions.isNotEmpty()) {
+                Text(
+                    "Спутники: ${save.companions.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlotActions(state: GameUiState, vm: GameViewModel) {
+    val save = state.save ?: return
+    val stage = Plot.stageAt(save.stageIndex)
+    val enc = stage.encounter
+    val canAdvance = !save.princessSaved && save.stageIndex < Plot.DRAGON_TOWER.lastIndex
+    val canRecruit = enc?.stance == Plot.Stance.RECRUITABLE &&
+        !save.companions.contains(enc.name)
+    val canFight = enc?.stance == Plot.Stance.HOSTILE && enc.enemy != null
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (canRecruit) {
+            PrimaryActionButton(
+                label = "Завербовать",
+                onClick = vm::recruitCurrent,
+                modifier = Modifier.weight(1f),
+                enabled = !state.isSending
+            )
+        }
+        if (canFight) {
+            PrimaryActionButton(
+                label = "Сражаться",
+                onClick = vm::engageStageEnemy,
+                modifier = Modifier.weight(1f),
+                enabled = !state.isSending
+            )
+        }
+        if (canAdvance) {
+            PrimaryActionButton(
+                label = "Дальше",
+                onClick = vm::advanceStage,
+                modifier = Modifier.weight(1f),
+                enabled = !state.isSending
+            )
+        }
+    }
 }
 
 @Composable
@@ -121,7 +186,6 @@ private fun DiceTray(vm: GameViewModel) {
         DiceButton(label = "d20", onClick = vm::rollD20)
         DiceButton(label = "d6", onClick = vm::rollD6)
         DiceButton(label = "d8", onClick = vm::rollD8)
-        PrimaryActionButton(label = "Старт боя", onClick = vm::beginSampleCombat)
     }
 }
 

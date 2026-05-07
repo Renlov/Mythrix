@@ -22,14 +22,35 @@ class ScriptedDmEngine : LlmEngine {
     override fun generate(prompt: String, history: List<LlmMessage>): Flow<String> = flow {
         val turn = history.count { it.role == LlmMessage.Role.ASSISTANT }
         val intent = classify(prompt.lowercase())
-        val pool = REPLIES.getValue(intent)
-        // pick a stable index for (intent, prompt) pair, varied between turns
-        val seed = (prompt.hashCode() xor (turn * 31)).absoluteValue
-        val reply = pool[seed % pool.size]
+        val plotContext = extractPlotContext(history)
+
+        val reply = if (intent == Intent.GENERIC && plotContext != null) {
+            // Fall back to the stage situation so the player isn't stuck in generic limbo
+            // when the LLM is unavailable.
+            plotContext
+        } else {
+            val pool = REPLIES.getValue(intent)
+            val seed = (prompt.hashCode() xor (turn * 31)).absoluteValue
+            pool[seed % pool.size]
+        }
         for (chunk in reply.chunked(3)) {
             emit(chunk)
             delay(35)
         }
+    }
+
+    private fun extractPlotContext(history: List<LlmMessage>): String? {
+        val sys = history.lastOrNull {
+            it.role == LlmMessage.Role.SYSTEM && it.content.contains("[ТЕКУЩИЙ ЭТАП")
+        } ?: return null
+        // Strip the leading marker line, keep the situation prose only.
+        return sys.content
+            .lineSequence()
+            .filterNot { it.startsWith("[ТЕКУЩИЙ ЭТАП") }
+            .filterNot { it.startsWith("Веди игрока") }
+            .joinToString("\n")
+            .trim()
+            .takeIf { it.isNotEmpty() }
     }
 
     private fun classify(prompt: String): Intent {

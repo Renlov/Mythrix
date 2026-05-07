@@ -10,6 +10,7 @@ import com.pimenov.game.api.Enemy
 import com.pimenov.game.api.GameRepository
 import com.pimenov.game.api.GameSave
 import com.pimenov.game.api.MessageAuthor
+import com.pimenov.game.api.Plot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -19,7 +20,18 @@ class SendPlayerMessageUseCase(
 ) {
     fun invoke(content: String, history: List<ChatMessage>): Flow<String> = flow {
         repo.appendMessage(ChatMessage(author = MessageAuthor.PLAYER, content = content))
-        val mapped = history.map {
+        // Inject the current plot stage as a system message so the LLM stays on rails.
+        val save = repo.loadState()
+        val stage = save?.let { Plot.stageAt(it.stageIndex) }
+        val plotContext: List<LlmMessage> = if (save != null && stage != null) {
+            listOf(
+                LlmMessage(
+                    role = LlmMessage.Role.SYSTEM,
+                    content = Plot.renderContext(stage, save.companions)
+                )
+            )
+        } else emptyList()
+        val mapped = plotContext + history.map {
             LlmMessage(
                 role = when (it.author) {
                     MessageAuthor.PLAYER -> LlmMessage.Role.USER
@@ -35,6 +47,58 @@ class SendPlayerMessageUseCase(
             emit(chunk)
         }
         repo.appendMessage(ChatMessage(author = MessageAuthor.DM, content = sb.toString()))
+    }
+}
+
+/**
+ * Advance to the next plot stage. Posts a SYSTEM chat line with the new scene's brief
+ * so the player sees progress immediately, even before the DM responds.
+ * If the next stage has a hostile encounter — auto-starts combat.
+ */
+class AdvancePlotUseCase(private val repo: GameRepository) {
+    suspend operator fun invoke(): GameSave? {
+        val current = repo.loadState() ?: return null
+        if (current.princessSaved) return current
+        val nextIndex = (current.stageIndex + 1).coerceAtMost(Plot.DRAGON_TOWER.lastIndex)
+        if (nextIndex == current.stageIndex) return current
+        val stage = Plot.stageAt(nextIndex)
+        val updated = current.copy(
+            stageIndex = nextIndex,
+            sceneTag = stage.sceneTag,
+            combat = stage.encounter?.enemy?.let {
+                CombatState(enemy = it, playerTurn = true, log = listOf("Бой: ${it.name}!"))
+            }
+        )
+        repo.saveState(updated)
+        repo.appendMessage(
+            ChatMessage(
+                author = MessageAuthor.SYSTEM,
+                content = "Этап ${stage.index + 1}/${Plot.DRAGON_TOWER.size}: ${stage.title}\n${stage.situation}"
+            )
+        )
+        return updated
+    }
+}
+
+/**
+ * Recruit the current stage's NPC into the party, if recruitable.
+ */
+class RecruitCompanionUseCase(private val repo: GameRepository) {
+    suspend operator fun invoke(): Boolean {
+        val save = repo.loadState() ?: return false
+        val stage = Plot.stageAt(save.stageIndex)
+        val enc = stage.encounter ?: return false
+        if (enc.stance != Plot.Stance.RECRUITABLE) return false
+        if (save.companions.contains(enc.name)) return false
+        val updated = save.copy(companions = save.companions + enc.name)
+        repo.saveState(updated)
+        repo.appendMessage(
+            ChatMessage(
+                author = MessageAuthor.SYSTEM,
+                content = "${enc.name} присоединяется к отряду."
+            )
+        )
+        return true
     }
 }
 

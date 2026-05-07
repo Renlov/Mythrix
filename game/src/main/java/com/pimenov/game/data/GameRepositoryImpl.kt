@@ -6,6 +6,7 @@ import com.pimenov.game.api.GameRepository
 import com.pimenov.game.api.GameSave
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
@@ -27,7 +28,11 @@ class GameRepositoryImpl(
                 id = 1L,
                 characterId = save.characterId,
                 sceneTag = save.sceneTag,
-                combatJson = save.combat?.let { json.encodeToString(CombatState.serializer(), it) }
+                combatJson = save.combat?.let { json.encodeToString(CombatState.serializer(), it) },
+                stageIndex = save.stageIndex,
+                companionsJson = if (save.companions.isEmpty()) null
+                else json.encodeToString(ListSerializer(String.serializer()), save.companions),
+                princessSaved = save.princessSaved
             )
         )
     }
@@ -43,8 +48,13 @@ class GameRepositoryImpl(
     }
 }
 
-private fun GameSaveEntity.toDomain(json: Json): GameSave = GameSave(
+internal fun GameSaveEntity.toDomain(json: Json): GameSave = GameSave(
     characterId = characterId,
     sceneTag = sceneTag,
-    combat = combatJson?.let { json.decodeFromString(CombatState.serializer(), it) }
+    combat = combatJson?.let { json.decodeFromString(CombatState.serializer(), it) },
+    stageIndex = stageIndex,
+    companions = companionsJson?.let {
+        json.decodeFromString(ListSerializer(String.serializer()), it)
+    } ?: emptyList(),
+    princessSaved = princessSaved
 )

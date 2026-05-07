@@ -23,7 +23,10 @@ data class CombatState(
 data class GameSave(
     val characterId: Long,
     val sceneTag: String = "tavern",
-    val combat: CombatState? = null
+    val combat: CombatState? = null,
+    val stageIndex: Int = 0,
+    val companions: List<String> = emptyList(),
+    val princessSaved: Boolean = false
 )
 
 enum class MessageAuthor { PLAYER, DM, SYSTEM }

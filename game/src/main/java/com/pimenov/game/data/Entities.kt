@@ -10,7 +10,10 @@ data class GameSaveEntity(
     @PrimaryKey val id: Long = 1L,
     val characterId: Long,
     val sceneTag: String,
-    val combatJson: String?
+    val combatJson: String?,
+    val stageIndex: Int = 0,
+    val companionsJson: String? = null,
+    val princessSaved: Boolean = false
 )
 
 @Entity(tableName = "chat_messages")
