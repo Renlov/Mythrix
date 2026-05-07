@@ -1,3 +1,69 @@
 <resources>
     <string name="app_name">Mythrix DND AI</string>
+
+    <string name="menu_new_game">Новая игра</string>
+    <string name="menu_continue">Продолжить</string>
+    <string name="menu_settings">Настройки</string>
+
+    <string name="settings_title">Настройки</string>
+    <string name="settings_volume">Громкость музыки</string>
+    <string name="settings_delete_model">Удалить модель</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_language_ru">Русский</string>
+    <string name="settings_language_en">English</string>
+
+    <string name="model_download_title">Загрузка модели</string>
+    <string name="model_download_subtitle">Скачиваем оффлайн-модель ИИ. Это однократная операция.</string>
+    <string name="model_download_start">Начать загрузку</string>
+    <string name="model_download_retry">Повторить</string>
+    <string name="model_download_done">Готово</string>
+    <string name="model_download_progress">%1$d%%</string>
+    <string name="model_download_skip">Пропустить (использовать офлайн-режим)</string>
+    <string name="model_pick_variant">Выберите модель ИИ</string>
+
+    <string name="settings_download_model">Скачать модель</string>
+    <string name="settings_change_model">Сменить модель</string>
+    <string name="common_back">Назад</string>
+
+    <string name="tab_plots">Сюжеты</string>
+    <string name="tab_continue">Продолжить</string>
+    <string name="tab_heroes">Герои</string>
+    <string name="tab_settings">Настройки</string>
+
+    <string name="plots_default_title">Тропа теней</string>
+    <string name="plots_default_summary">Стартовая глава: таверна, лес, заброшенное подземелье.</string>
+    <string name="plots_start">Начать сюжет</string>
+    <string name="plots_more_soon">Новые сюжеты скоро…</string>
+    <string name="continue_no_save">Сохранений нет. Создайте героя и начните игру.</string>
+    <string name="heroes_empty">У вас ещё нет героев.</string>
+    <string name="heroes_create">Создать героя</string>
+
+    <string name="character_title">Создание персонажа</string>
+    <string name="character_name">Имя</string>
+    <string name="character_race">Раса</string>
+    <string name="character_class">Класс</string>
+    <string name="character_create">Создать</string>
+    <string name="race_human">Человек</string>
+    <string name="race_elf">Эльф</string>
+    <string name="race_dwarf">Дварф</string>
+    <string name="race_halfling">Полурослик</string>
+    <string name="class_fighter">Воин</string>
+    <string name="class_rogue">Плут</string>
+    <string name="class_wizard">Волшебник</string>
+    <string name="class_cleric">Жрец</string>
+
+    <string name="game_send">Отправить</string>
+    <string name="game_input_hint">Что вы делаете?</string>
+    <string name="game_attack">Атаковать</string>
+    <string name="game_dodge">Уклониться</string>
+    <string name="game_cast">Колдовать</string>
+    <string name="game_hp">HP %1$d/%2$d</string>
+    <string name="game_ac">AC %1$d</string>
+    <string name="game_enemy">Противник: %1$s</string>
+
+    <string name="dice_d20">d20</string>
+    <string name="dice_d6">d6</string>
+    <string name="dice_d8">d8</string>
+
+    <string name="loading">Загрузка…</string>
 </resources>

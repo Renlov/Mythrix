@@ -40,6 +40,14 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(project(":uikit"))
+    implementation(project(":main"))
+    implementation(project(":settings"))
+    implementation(project(":character"))
+    implementation(project(":game"))
+    implementation(project(":feature"))
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -48,6 +56,10 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
