@@ -69,22 +69,30 @@ class GameViewModel(
                         else -> flowOf(characterRepo.byId(id))
                     }
                 }
-                .collect { ch -> _state.update { it.copy(character = ch) } }
+                .collect { ch ->
+                    _state.update { it.copy(character = ch) }
+                    maybeIntro()
+                }
         }
         viewModelScope.launch {
             gameRepo.observeMessages().collect { messages ->
                 _state.update { it.copy(messages = messages) }
-                val character = _state.value.character
-                if (messages.isEmpty() && character != null && !introScheduled) {
-                    introScheduled = true
-                    sendIntro()
-                }
+                maybeIntro()
             }
         }
         viewModelScope.launch {
             gameRepo.observeState().collect { save ->
                 _state.update { it.copy(save = save) }
             }
+        }
+    }
+
+    private fun maybeIntro() {
+        if (introScheduled) return
+        val s = _state.value
+        if (s.character != null && s.messages.isEmpty()) {
+            introScheduled = true
+            sendIntro()
         }
     }
 
@@ -218,6 +226,7 @@ class GameViewModel(
                         )
                     )
                 }
+                if (result.playerWon && !princessSaved) advancePlot()
             }
         }
     }
@@ -239,6 +248,8 @@ class GameViewModel(
                         content = "Сейчас никого нельзя завербовать."
                     )
                 )
+            } else {
+                advancePlot()
             }
         }
     }

@@ -4,9 +4,19 @@ object PromptBuilder {
     /** Markers that indicate the model is about to hallucinate the next turn. Used to cut output. */
     val STOP_MARKERS: List<String> = listOf(
         "[PLAYER]", "[SYSTEM]", "[DM]",
-        "\nPlayer:", "\nИгрок:", "\nDM:", "\nМастер:",
-        "Player:", "Игрок:"
+        "Player:", "Игрок:", "Пользователь:", "User:",
+        "DM:", "Мастер:",
+        "<|", "<|im_start|>", "<|im_end|>", "<|user|>", "<|assistant|>"
     )
+
+    private val UNICODE_ESCAPE = Regex("""\\u([0-9a-fA-F]{4})""")
+
+    /** Decode stray "\uXXXX" literals that some models emit as text. */
+    fun decodeEscapes(text: String): String =
+        UNICODE_ESCAPE.replace(text) { m ->
+            runCatching { m.groupValues[1].toInt(16).toChar().toString() }
+                .getOrDefault(m.value)
+        }
 
     val DM_SYSTEM_RU: String = """
         Ты — Мастер игры (DM) в текстовом D&D-приключении на русском.

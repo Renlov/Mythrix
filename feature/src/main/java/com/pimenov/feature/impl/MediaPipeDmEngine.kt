@@ -91,7 +91,7 @@ class MediaPipeDmEngine(
                 session.generateResponseAsync { partial, done ->
                     if (stopped) return@generateResponseAsync
                     if (partial.isNotEmpty()) {
-                        buffer.append(partial)
+                        buffer.append(PromptBuilder.decodeEscapes(partial))
                         val safeEnd = safeEmitPrefix()
                         // Check if a stop marker is fully present.
                         val hardStop = PromptBuilder.STOP_MARKERS
