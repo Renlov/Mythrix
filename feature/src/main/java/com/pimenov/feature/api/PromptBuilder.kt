@@ -45,10 +45,9 @@ object PromptBuilder {
           и спутников. НЕ возвращай вопрос обратно. Только после ответа можно
           предложить действия.
         - Если игрок описал действие — опиши результат и реакцию мира.
-        - В конце ответа предложи 2–3 коротких варианта действия
-          («Можешь: 1) … 2) … 3) …») ИЛИ задай уточняющий вопрос по теме.
-          НЕ повторяй фразу «Что будешь делать?» — она пуста, замени её на
-          конкретный выбор.
+        - В конце ответа предложи 2–3 коротких конкретных варианта действия
+          в формате «Можешь: 1) … 2) … 3) …», привязанных к сцене и NPC.
+          Запрещены пустые финалки общего вида — всегда конкретика.
         - НЕ переходи на следующий этап сам — переход делает система.
         - НЕ объявляй начало боя — бой запускает система. Можешь описывать угрозу.
 
@@ -68,6 +67,15 @@ object PromptBuilder {
      * the prefill within the model's context window.
      */
     private const val HISTORY_CHAR_BUDGET = 4000
+
+    private val EMPTY_TAILS = Regex(
+        """\s*(Что будешь делать\??|Что делаешь\??|Твой ход\??|Ход за тобой\??)\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** Strip empty closing prompts so the model doesn't latch onto them as a pattern. */
+    private fun sanitize(content: String): String =
+        content.replace(EMPTY_TAILS, "").trimEnd()
 
     fun build(systemPrompt: String, history: List<LlmMessage>, userPrompt: String): String {
         val sb = StringBuilder()
@@ -92,7 +100,7 @@ object PromptBuilder {
                     LlmMessage.Role.ASSISTANT -> "Мастер"
                     LlmMessage.Role.SYSTEM -> "Сюжет"
                 }
-                sb.append(tag).append(": ").append(msg.content).append("\n")
+                sb.append(tag).append(": ").append(sanitize(msg.content)).append("\n")
             }
             sb.append("\n")
         }

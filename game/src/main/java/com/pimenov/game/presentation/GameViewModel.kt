@@ -139,7 +139,6 @@ class GameViewModel(
                 Plot.Stance.NEUTRAL -> Unit
             }
         }
-        sb.append("\n\nЧто будешь делать?")
         return sb.toString()
     }
 

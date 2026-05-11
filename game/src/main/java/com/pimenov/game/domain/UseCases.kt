@@ -100,7 +100,6 @@ class AdvancePlotUseCase(private val repo: GameRepository) {
             }
         }
         if (stage.isFinale) sb.append("\n\nЭто финальный бой.")
-        sb.append("\n\nЧто будешь делать?")
         return sb.toString()
     }
 }
