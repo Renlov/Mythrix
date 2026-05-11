@@ -37,10 +37,16 @@ object PromptBuilder {
         Как вести игрока:
         - НЕ решай за игрока. Не описывай его действия, эмоции или решения,
           которые он сам не заявил.
+        - Если игрок задал ВОПРОС (где, кто, что, можно ли, сколько и т.п.) —
+          сначала дай конкретный ответ от лица мира/NPC, опираясь на сцену
+          и спутников. НЕ возвращай вопрос обратно. Только после ответа можно
+          предложить действия.
+        - Если игрок описал действие — опиши результат и реакцию мира.
         - В конце ответа предложи 2–3 коротких варианта действия
-          («Можешь: 1) … 2) … 3) …») ИЛИ задай прямой вопрос «Что делаешь?».
-        - Если игрок задал уточняющий вопрос — отвечай по сцене, не двигай сюжет.
-        - НЕ переходи на следующий этап сам — это делает система по кнопке «Дальше».
+          («Можешь: 1) … 2) … 3) …») ИЛИ задай уточняющий вопрос по теме.
+          НЕ повторяй фразу «Что будешь делать?» — она пуста, замени её на
+          конкретный выбор.
+        - НЕ переходи на следующий этап сам — переход делает система.
         - НЕ объявляй начало боя — бой запускает система. Можешь описывать угрозу.
 
         Стиль:
@@ -49,22 +55,41 @@ object PromptBuilder {
         - Не пиши теги вроде [PLAYER], [DM], [SYSTEM] в своём ответе.
     """.trimIndent()
 
+    /**
+     * Qwen 2.5 ChatML format. Qwen-Instruct models expect this exact template;
+     * any other shape (e.g. [PLAYER]/[DM]) gives garbage or echo outputs.
+     */
     fun build(systemPrompt: String, history: List<LlmMessage>, userPrompt: String): String {
         val sb = StringBuilder()
-        sb.appendLine("[SYSTEM]")
-        sb.appendLine(systemPrompt)
-        history.takeLast(16).forEach {
-            val tag = when (it.role) {
-                LlmMessage.Role.USER -> "[PLAYER]"
-                LlmMessage.Role.ASSISTANT -> "[DM]"
-                LlmMessage.Role.SYSTEM -> "[SYSTEM]"
+        sb.append("<|im_start|>system\n").append(systemPrompt).append("<|im_end|>\n")
+        // Merge consecutive SYSTEM messages from history into the system block above
+        // by emitting them inline before the next user turn, so Qwen still sees them.
+        val pending = StringBuilder()
+        history.takeLast(16).forEach { msg ->
+            when (msg.role) {
+                LlmMessage.Role.SYSTEM -> {
+                    if (pending.isNotEmpty()) pending.append('\n')
+                    pending.append(msg.content)
+                }
+                LlmMessage.Role.USER -> {
+                    sb.append("<|im_start|>user\n")
+                    if (pending.isNotEmpty()) {
+                        sb.append("[Контекст сцены]\n").append(pending).append("\n\n")
+                        pending.clear()
+                    }
+                    sb.append(msg.content).append("<|im_end|>\n")
+                }
+                LlmMessage.Role.ASSISTANT -> {
+                    sb.append("<|im_start|>assistant\n").append(msg.content).append("<|im_end|>\n")
+                }
             }
-            sb.appendLine(tag)
-            sb.appendLine(it.content)
         }
-        sb.appendLine("[PLAYER]")
-        sb.appendLine(userPrompt)
-        sb.append("[DM]\n")
+        sb.append("<|im_start|>user\n")
+        if (pending.isNotEmpty()) {
+            sb.append("[Контекст сцены]\n").append(pending).append("\n\n")
+        }
+        sb.append(userPrompt).append("<|im_end|>\n")
+        sb.append("<|im_start|>assistant\n")
         return sb.toString()
     }
 }
