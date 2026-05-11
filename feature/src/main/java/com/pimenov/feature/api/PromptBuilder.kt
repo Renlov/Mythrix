@@ -1,12 +1,15 @@
 package com.pimenov.feature.api
 
 object PromptBuilder {
-    /** Markers that indicate the model is about to hallucinate the next turn. Used to cut output. */
+    /**
+     * Markers that indicate the model is about to hallucinate the next turn.
+     * Anchored on newline so we don't cut on the role label appearing inside narration
+     * (e.g. when DM legitimately writes "игрок видит…").
+     */
     val STOP_MARKERS: List<String> = listOf(
-        "[PLAYER]", "[SYSTEM]", "[DM]",
-        "Player:", "Игрок:", "Пользователь:", "User:",
-        "DM:", "Мастер:",
-        "<|", "<|im_start|>", "<|im_end|>", "<|user|>", "<|assistant|>"
+        "\nИгрок:", "\nPlayer:", "\nПользователь:", "\nUser:",
+        "<|im_end|>", "<|im_start|>", "<|user|>", "<|assistant|>",
+        "<|endoftext|>"
     )
 
     private val UNICODE_ESCAPE = Regex("""\\u([0-9a-fA-F]{4})""")
@@ -56,40 +59,46 @@ object PromptBuilder {
     """.trimIndent()
 
     /**
-     * Qwen 2.5 ChatML format. Qwen-Instruct models expect this exact template;
-     * any other shape (e.g. [PLAYER]/[DM]) gives garbage or echo outputs.
+     * Plain conversational text. MediaPipe's .task bundle applies the model's
+     * native chat template internally — wrapping the text in ChatML ourselves
+     * caused double-templating and empty outputs. We pass system + history + new
+     * turn as one user message and let the bundle handle role tagging.
+     *
+     * History is capped by total character budget (rough token proxy) to keep
+     * the prefill within the model's context window.
      */
+    private const val HISTORY_CHAR_BUDGET = 4000
+
     fun build(systemPrompt: String, history: List<LlmMessage>, userPrompt: String): String {
         val sb = StringBuilder()
-        sb.append("<|im_start|>system\n").append(systemPrompt).append("<|im_end|>\n")
-        // Merge consecutive SYSTEM messages from history into the system block above
-        // by emitting them inline before the next user turn, so Qwen still sees them.
-        val pending = StringBuilder()
-        history.takeLast(16).forEach { msg ->
-            when (msg.role) {
-                LlmMessage.Role.SYSTEM -> {
-                    if (pending.isNotEmpty()) pending.append('\n')
-                    pending.append(msg.content)
+        sb.append(systemPrompt).append("\n\n")
+
+        // Newest-first selection, then reverse to chronological — keeps the
+        // most recent context when we hit the budget.
+        val selected = mutableListOf<LlmMessage>()
+        var budget = HISTORY_CHAR_BUDGET
+        for (msg in history.asReversed()) {
+            val cost = msg.content.length + 16
+            if (cost > budget) break
+            selected.add(0, msg)
+            budget -= cost
+        }
+
+        if (selected.isNotEmpty()) {
+            sb.append("Контекст сцены и предыдущие реплики:\n")
+            selected.forEach { msg ->
+                val tag = when (msg.role) {
+                    LlmMessage.Role.USER -> "Игрок"
+                    LlmMessage.Role.ASSISTANT -> "Мастер"
+                    LlmMessage.Role.SYSTEM -> "Сюжет"
                 }
-                LlmMessage.Role.USER -> {
-                    sb.append("<|im_start|>user\n")
-                    if (pending.isNotEmpty()) {
-                        sb.append("[Контекст сцены]\n").append(pending).append("\n\n")
-                        pending.clear()
-                    }
-                    sb.append(msg.content).append("<|im_end|>\n")
-                }
-                LlmMessage.Role.ASSISTANT -> {
-                    sb.append("<|im_start|>assistant\n").append(msg.content).append("<|im_end|>\n")
-                }
+                sb.append(tag).append(": ").append(msg.content).append("\n")
             }
+            sb.append("\n")
         }
-        sb.append("<|im_start|>user\n")
-        if (pending.isNotEmpty()) {
-            sb.append("[Контекст сцены]\n").append(pending).append("\n\n")
-        }
-        sb.append(userPrompt).append("<|im_end|>\n")
-        sb.append("<|im_start|>assistant\n")
+
+        sb.append("Игрок: ").append(userPrompt).append("\n")
+        sb.append("Мастер:")
         return sb.toString()
     }
 }

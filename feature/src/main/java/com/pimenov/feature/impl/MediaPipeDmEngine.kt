@@ -1,6 +1,7 @@
 package com.pimenov.feature.impl
 
 import android.content.Context
+import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import com.pimenov.feature.api.LlmEngine
@@ -14,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * On-device LLM via Google MediaPipe Tasks GenAI.
- * Loads a `.task` model file (Gemma / Gemma 3 / Phi etc.) and streams tokens.
+ * Loads a `.task` model file (Qwen / Gemma) and streams tokens.
  *
  * If the native lib or model is missing/broken — falls back to [fallback] engine
  * so the app never crashes.
@@ -33,27 +34,49 @@ class MediaPipeDmEngine(
 
     private fun obtain(): LlmInference? {
         cached.get()?.let { return it }
-        if (!modelFile.exists() || modelFile.length() < 1_000_000) return null
-        val created = runCatching {
-            val opts = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(modelFile.absolutePath)
-                .setMaxTokens(MAX_TOKENS)
-                .setMaxTopK(MAX_TOP_K)
-                .build()
-            LlmInference.createFromOptions(context, opts)
-        }.getOrNull() ?: return null
+        if (!modelFile.exists() || modelFile.length() < 1_000_000) {
+            Log.w(TAG, "model file missing or too small: ${modelFile.absolutePath}")
+            return null
+        }
+        // Try GPU first — Qwen 1.5B on CPU is too slow for interactive UX.
+        // Fall back to CPU if GPU init fails on this device.
+        val backends = listOf(
+            LlmInference.Backend.GPU to "GPU",
+            LlmInference.Backend.CPU to "CPU"
+        )
+        val created = backends.firstNotNullOfOrNull { (backend, name) ->
+            runCatching {
+                val opts = LlmInference.LlmInferenceOptions.builder()
+                    .setModelPath(modelFile.absolutePath)
+                    .setMaxTokens(MAX_TOKENS)
+                    .setMaxTopK(MAX_TOP_K)
+                    .setPreferredBackend(backend)
+                    .build()
+                LlmInference.createFromOptions(context, opts).also {
+                    Log.i(TAG, "LlmInference created on $name backend, maxTokens=$MAX_TOKENS")
+                }
+            }.onFailure { Log.w(TAG, "backend $name init failed: ${it.message}") }
+                .getOrNull()
+        } ?: run {
+            Log.e(TAG, "no backend could load the model")
+            return null
+        }
         return if (cached.compareAndSet(null, created)) {
             created
         } else {
-            // Another thread won — discard ours.
             runCatching { created.close() }
             cached.get()
         }
     }
 
     override fun generate(prompt: String, history: List<LlmMessage>): Flow<String> {
-        val engine = obtain() ?: return fallback.generate(prompt, history)
+        val engine = obtain() ?: run {
+            Log.w(TAG, "engine unavailable, using scripted fallback")
+            return fallback.generate(prompt, history)
+        }
         val fullPrompt = PromptBuilder.build(PromptBuilder.DM_SYSTEM_RU, history, prompt)
+        Log.d(TAG, "prompt chars=${fullPrompt.length}, history=${history.size}")
+
         return callbackFlow {
             val session = runCatching {
                 LlmInferenceSession.createFromOptions(
@@ -64,7 +87,9 @@ class MediaPipeDmEngine(
                         .build()
                 )
             }.getOrElse { err ->
-                close(err)
+                Log.e(TAG, "session create failed", err)
+                trySend("[ошибка движка: ${err.message ?: err.javaClass.simpleName}]")
+                close()
                 return@callbackFlow
             }
 
@@ -75,13 +100,11 @@ class MediaPipeDmEngine(
             var stopped = false
 
             fun safeEmitPrefix(): Int {
-                // Find the earliest stop marker in the buffer.
                 val firstStop = PromptBuilder.STOP_MARKERS
                     .map { buffer.indexOf(it) }
                     .filter { it >= 0 }
                     .minOrNull()
                 if (firstStop != null) return firstStop
-                // Otherwise, hold back tail that could be the start of a marker.
                 val tailGuard = PromptBuilder.STOP_MARKERS.maxOf { it.length }
                 return (buffer.length - tailGuard).coerceAtLeast(0)
             }
@@ -92,8 +115,6 @@ class MediaPipeDmEngine(
                     if (stopped) return@generateResponseAsync
                     if (partial.isNotEmpty()) {
                         buffer.append(PromptBuilder.decodeEscapes(partial))
-                        val safeEnd = safeEmitPrefix()
-                        // Check if a stop marker is fully present.
                         val hardStop = PromptBuilder.STOP_MARKERS
                             .map { buffer.indexOf(it) }
                             .filter { it >= 0 }
@@ -107,6 +128,7 @@ class MediaPipeDmEngine(
                             close()
                             return@generateResponseAsync
                         }
+                        val safeEnd = safeEmitPrefix()
                         if (safeEnd > emittedLen) {
                             trySend(buffer.substring(emittedLen, safeEnd))
                             emittedLen = safeEnd
@@ -116,11 +138,19 @@ class MediaPipeDmEngine(
                         if (buffer.length > emittedLen) {
                             trySend(buffer.substring(emittedLen, buffer.length))
                         }
+                        Log.d(TAG, "generation done, totalChars=${buffer.length}")
+                        if (buffer.isEmpty()) {
+                            trySend("[модель вернула пустой ответ — попробуй переформулировать]")
+                        }
                         close()
                     }
                 }
             }
-            handle.exceptionOrNull()?.let { close(it) }
+            handle.exceptionOrNull()?.let { err ->
+                Log.e(TAG, "generate call failed", err)
+                trySend("[ошибка генерации: ${err.message ?: err.javaClass.simpleName}]")
+                close()
+            }
 
             awaitClose {
                 runCatching { session.close() }
@@ -133,7 +163,8 @@ class MediaPipeDmEngine(
     }
 
     private companion object {
-        const val MAX_TOKENS = 1024
+        const val TAG = "MediaPipeDmEngine"
+        const val MAX_TOKENS = 4096
         const val MAX_TOP_K = 40
         const val TEMPERATURE = 0.8f
     }
