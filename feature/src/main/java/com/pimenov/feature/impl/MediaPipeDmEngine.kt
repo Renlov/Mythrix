@@ -68,11 +68,56 @@ class MediaPipeDmEngine(
                 return@callbackFlow
             }
 
+            // Buffer streamed tokens so we can cut the moment the model
+            // tries to hallucinate a next turn ([PLAYER], "Игрок:", etc.).
+            val buffer = StringBuilder()
+            var emittedLen = 0
+            var stopped = false
+
+            fun safeEmitPrefix(): Int {
+                // Find the earliest stop marker in the buffer.
+                val firstStop = PromptBuilder.STOP_MARKERS
+                    .map { buffer.indexOf(it) }
+                    .filter { it >= 0 }
+                    .minOrNull()
+                if (firstStop != null) return firstStop
+                // Otherwise, hold back tail that could be the start of a marker.
+                val tailGuard = PromptBuilder.STOP_MARKERS.maxOf { it.length }
+                return (buffer.length - tailGuard).coerceAtLeast(0)
+            }
+
             val handle = runCatching {
                 session.addQueryChunk(fullPrompt)
                 session.generateResponseAsync { partial, done ->
-                    if (partial.isNotEmpty()) trySend(partial)
-                    if (done) close()
+                    if (stopped) return@generateResponseAsync
+                    if (partial.isNotEmpty()) {
+                        buffer.append(partial)
+                        val safeEnd = safeEmitPrefix()
+                        // Check if a stop marker is fully present.
+                        val hardStop = PromptBuilder.STOP_MARKERS
+                            .map { buffer.indexOf(it) }
+                            .filter { it >= 0 }
+                            .minOrNull()
+                        if (hardStop != null) {
+                            if (hardStop > emittedLen) {
+                                trySend(buffer.substring(emittedLen, hardStop))
+                            }
+                            emittedLen = hardStop
+                            stopped = true
+                            close()
+                            return@generateResponseAsync
+                        }
+                        if (safeEnd > emittedLen) {
+                            trySend(buffer.substring(emittedLen, safeEnd))
+                            emittedLen = safeEnd
+                        }
+                    }
+                    if (done) {
+                        if (buffer.length > emittedLen) {
+                            trySend(buffer.substring(emittedLen, buffer.length))
+                        }
+                        close()
+                    }
                 }
             }
             handle.exceptionOrNull()?.let { close(it) }
