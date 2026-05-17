@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -71,6 +72,26 @@ fun GameScreen(viewModel: GameViewModel = koinViewModel()) {
                             ChatBubble(text = state.streamingDmText, author = BubbleAuthor.DM)
                         }
                     }
+                    if (state.isSending && state.streamingDmText.isEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.height(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                                Text(
+                                    "Мастер думает…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
             }
             if (state.save?.combat != null) {
@@ -122,10 +143,10 @@ private fun PlotActions(state: GameUiState, vm: GameViewModel) {
     val save = state.save ?: return
     val stage = Plot.stageAt(save.stageIndex)
     val enc = stage.encounter
-    val canAdvance = !save.princessSaved && save.stageIndex < Plot.DRAGON_TOWER.lastIndex
     val canRecruit = enc?.stance == Plot.Stance.RECRUITABLE &&
         !save.companions.contains(enc.name)
     val canFight = enc?.stance == Plot.Stance.HOSTILE && enc.enemy != null
+    if (!canRecruit && !canFight) return
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -142,14 +163,6 @@ private fun PlotActions(state: GameUiState, vm: GameViewModel) {
             PrimaryActionButton(
                 label = "Сражаться",
                 onClick = vm::engageStageEnemy,
-                modifier = Modifier.weight(1f),
-                enabled = !state.isSending
-            )
-        }
-        if (canAdvance) {
-            PrimaryActionButton(
-                label = "Дальше",
-                onClick = vm::advanceStage,
                 modifier = Modifier.weight(1f),
                 enabled = !state.isSending
             )
