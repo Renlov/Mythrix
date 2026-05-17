@@ -20,18 +20,9 @@ class SendPlayerMessageUseCase(
 ) {
     fun invoke(content: String, history: List<ChatMessage>): Flow<String> = flow {
         repo.appendMessage(ChatMessage(author = MessageAuthor.PLAYER, content = content))
-        // Inject the current plot stage as a system message so the LLM stays on rails.
-        val save = repo.loadState()
-        val stage = save?.let { Plot.stageAt(it.stageIndex) }
-        val plotContext: List<LlmMessage> = if (save != null && stage != null) {
-            listOf(
-                LlmMessage(
-                    role = LlmMessage.Role.SYSTEM,
-                    content = Plot.renderContext(stage, save.companions)
-                )
-            )
-        } else emptyList()
-        val mapped = plotContext + history.map {
+        // Pilot tavern mode: world context comes from TavernWorldBibleLoader inside
+        // the engine's system prompt. Legacy Plot.renderContext is bypassed.
+        val mapped = history.map {
             LlmMessage(
                 role = when (it.author) {
                     MessageAuthor.PLAYER -> LlmMessage.Role.USER

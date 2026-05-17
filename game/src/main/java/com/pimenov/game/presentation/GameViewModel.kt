@@ -77,7 +77,7 @@ class GameViewModel(
         viewModelScope.launch {
             gameRepo.observeMessages().collect { messages ->
                 _state.update { it.copy(messages = messages) }
-                maybeIntro()
+maybeIntro()
             }
         }
         viewModelScope.launch {

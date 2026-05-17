@@ -23,7 +23,14 @@ import java.util.concurrent.atomic.AtomicReference
 class MediaPipeDmEngine(
     private val context: Context,
     private val modelFile: File,
-    private val fallback: LlmEngine
+    private val fallback: LlmEngine,
+    /**
+     * Returns the freshly-assembled system prompt for the next turn.
+     * Re-invoked per generate() so that World Bible mutations (Phase 2)
+     * propagate without engine restart. May be null to fall back to the
+     * legacy [PromptBuilder.DM_SYSTEM_RU].
+     */
+    private val systemPromptProvider: () -> String? = { null }
 ) : LlmEngine {
 
     override val id: String = "mediapipe"
@@ -70,13 +77,9 @@ class MediaPipeDmEngine(
     }
 
     override fun generate(prompt: String, history: List<LlmMessage>): Flow<String> {
-        val engine = obtain() ?: run {
-            Log.w(TAG, "engine unavailable, using scripted fallback")
-            return fallback.generate(prompt, history)
-        }
-        val fullPrompt = PromptBuilder.build(PromptBuilder.DM_SYSTEM_RU, history, prompt)
-        Log.d(TAG, "prompt chars=${fullPrompt.length}, history=${history.size}")
-
+val engine = obtain() ?: return fallback.generate(prompt, history)
+        val systemPrompt = systemPromptProvider() ?: PromptBuilder.DM_SYSTEM_RU
+        val fullPrompt = PromptBuilder.build(systemPrompt, history, prompt)
         return callbackFlow {
             val session = runCatching {
                 val builder = LlmInferenceSession.LlmInferenceSessionOptions.builder()

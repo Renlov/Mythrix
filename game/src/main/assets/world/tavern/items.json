@@ -1,0 +1,75 @@
+[
+  {
+    "id": "item_traveler_dagger",
+    "name": "Дорожный нож",
+    "type": "weapon",
+    "subtype": "dagger",
+    "damage_die": "d4",
+    "weight": 0.3,
+    "price": 3,
+    "location_id": null,
+    "owner_id": "player_main",
+    "description": "Короткий нож с деревянной рукоятью. Кейн носит его на поясе сколько себя помнит. Чаще режет хлеб, чем что-то ещё."
+  },
+  {
+    "id": "item_iron_sword",
+    "name": "Железный меч",
+    "type": "weapon",
+    "subtype": "sword",
+    "damage_die": "d8",
+    "weight": 1.5,
+    "price": 15,
+    "location_id": null,
+    "owner_id": "npc_innkeeper",
+    "description": "Простой одноручный меч. Не парадный — лезвие в зазубринах, рукоять перемотана новой кожей поверх старой. Трактирщик не говорит, чей он был."
+  },
+  {
+    "id": "item_round_shield",
+    "name": "Круглый щит",
+    "type": "armor",
+    "subtype": "shield",
+    "armor_bonus": 2,
+    "weight": 2.5,
+    "price": 10,
+    "location_id": null,
+    "owner_id": "npc_innkeeper",
+    "description": "Деревянный щит, окованный железной полосой по краю. На внутренней стороне выжжено имя — Трактирщик стирает его рукавом, когда показывает товар."
+  },
+  {
+    "id": "item_short_bow",
+    "name": "Короткий лук",
+    "type": "weapon",
+    "subtype": "bow",
+    "damage_die": "d6",
+    "weight": 1.0,
+    "price": 12,
+    "location_id": null,
+    "owner_id": "npc_innkeeper",
+    "description": "Охотничий лук, не боевой. К нему — колчан с двенадцатью стрелами. Тетива новая."
+  },
+  {
+    "id": "item_war_axe",
+    "name": "Боевой топор",
+    "type": "weapon",
+    "subtype": "axe",
+    "damage_die": "d8",
+    "weight": 2.0,
+    "price": 14,
+    "location_id": null,
+    "owner_id": "npc_innkeeper",
+    "description": "Тяжёлый топор с короткой рукоятью. Лезвие посветлее остальных — недавно правленое. Похож на тот, что у Грима."
+  },
+  {
+    "id": "item_healing_supplies",
+    "name": "Лечебные припасы",
+    "type": "consumable",
+    "subtype": "healing",
+    "heal_die": "d4+2",
+    "uses": 3,
+    "weight": 0.5,
+    "price": 8,
+    "location_id": null,
+    "owner_id": "npc_innkeeper",
+    "description": "Холщовый свёрток: бинты, фляга с травяным настоем, мазь с резким запахом. Хватит на три перевязки. Трактирщик говорит — последний свёрток, других не будет."
+  }
+]
