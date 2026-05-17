@@ -16,6 +16,8 @@
 8. [08-project-decisions.md](08-project-decisions.md) — Решения по пилоту (язык, модель, сеттинг)
 9. [09-mood-catalog.md](09-mood-catalog.md) — Каталог атмосфер (7 mood)
 10. [10-dm-style-rules.md](10-dm-style-rules.md) — Стилевые правила DM (обращение, длина, тон)
+11. [11-system-prompt.md](11-system-prompt.md) — Системный промпт DM v1 (структура, версионирование)
+12. [12-local-testing.md](12-local-testing.md) — Локальное тестирование промпта через Ollama
 
 ## Ключевые принципы (TL;DR)
 
