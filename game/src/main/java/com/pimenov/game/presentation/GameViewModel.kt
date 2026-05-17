@@ -74,11 +74,8 @@ class GameViewModel(
         viewModelScope.launch {
             gameRepo.observeMessages().collect { messages ->
                 _state.update { it.copy(messages = messages) }
-                val character = _state.value.character
-                if (messages.isEmpty() && character != null && !introScheduled) {
-                    introScheduled = true
-                    sendIntro()
-                }
+                // Tavern pilot: no auto-intro. The DM opens the scene
+                // in response to the player's first action.
             }
         }
         viewModelScope.launch {
