@@ -15,6 +15,7 @@
 7. [07-dataset-collection.md](07-dataset-collection.md) — Сбор датасета
 8. [08-project-decisions.md](08-project-decisions.md) — Решения по пилоту (язык, модель, сеттинг)
 9. [09-mood-catalog.md](09-mood-catalog.md) — Каталог атмосфер (7 mood)
+10. [10-dm-style-rules.md](10-dm-style-rules.md) — Стилевые правила DM (обращение, длина, тон)
 
 ## Ключевые принципы (TL;DR)
 

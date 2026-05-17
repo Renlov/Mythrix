@@ -12,7 +12,7 @@
     "tags": ["indoor", "tavern", "village", "starting"],
     "connections": [],
     "npcs": [
-      "npc_innkeeper_borgar",
+      "npc_innkeeper",
       "npc_miner_hald",
       "npc_miner_torin",
       "npc_warrior_kettil",
