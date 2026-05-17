@@ -59,14 +59,36 @@
 
 ```
 [SYSTEM]              ← системный промпт DM (статично)
+[STYLE EXAMPLES]      ← 1-2 few-shot по atmosphere.mood локации
 [PLAYER]              ← из player.json (всегда)
-[CURRENT SCENE]       ← локация + её NPC + предметы
+[CURRENT SCENE]       ← локация (с atmosphere.nuance) + NPC + предметы
 [ACTIVE QUESTS]       ← все active
 [RELEVANT MEMORY]     ← top-5 из RAG
 [SCENE SUMMARY]       ← саммари текущей сцены (если есть)
 [RECENT MESSAGES]     ← последние 6-10 реплик дословно
 [PLAYER ACTION]       ← ход игрока
 ```
+
+## Подбор few-shot по атмосфере
+
+Few-shot примеры эталонного DM-нарратива хранятся в библиотеке,
+структурированной по `mood`:
+
+```
+few_shots/
+  somber/    — печальные, тяжёлые сцены (Фрагмент 1 трюм, Фрагмент 5 шторм)
+  dangerous/ — бой, погоня
+  cheerful/  — праздник, ярмарка
+  tense/     — напряжённое ожидание
+  ...
+```
+
+Сборщик читает `current_scene.atmosphere.mood` и подкладывает 1-2 примера
+из соответствующей папки в блок `[STYLE EXAMPLES]`. Это не даёт DM
+нагнетать в весёлой таверне или шутить на похоронах.
+
+Диалоговые приёмы (обрывистая речь, недосказанность) хранятся отдельно
+в `dialogue_examples/` без привязки к mood — они универсальны.
 
 ## Технологии
 

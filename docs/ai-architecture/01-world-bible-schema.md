@@ -12,12 +12,28 @@
   "name": "Врата Драконьей Башни",
   "parent_id": "loc_dragon_tower",
   "description": "Массивные кованые ворота у подножия башни.",
+  "atmosphere": {
+    "mood": "tense",
+    "tags": ["ruins", "watched"],
+    "nuance": "Ветер несёт гарь со склона. За воротами слышен далёкий рёв."
+  },
   "tags": ["entrance", "outdoor", "ruins"],
   "connections": ["loc_forest_path", "loc_tower_hall"],
   "npcs": ["npc_gatekeeper_orm"],
   "items": ["item_rune_key"]
 }
 ```
+
+**`atmosphere`** управляет тоном нарратива DM в этой локации.
+- `mood` (enum, обязательно) — машинный селектор few-shot примеров:
+  `cheerful` | `neutral` | `tense` | `somber` | `dangerous` | `mysterious` | `sacred`
+- `tags` (array) — дополнительные оттенки.
+- `nuance` (string) — свободный текст, подаётся в `[CURRENT SCENE]`
+  как руководство к интонации.
+
+Атмосфера может временно меняться через event `atmosphere_shift`
+(см. `04-event-extraction.md`) — например, если игрок поджёг таверну,
+mood становится `dangerous` до конца сцены.
 
 ### `npcs.json`
 ```json

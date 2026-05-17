@@ -44,6 +44,7 @@ DM описывает **намерение**, движок (Android) счита�
 | `buy` | buyer, seller, item_id | проверяет золото, переносит item + золото |
 | `quest_advance` | quest_id, new_stage | продвигает стадию (с валидацией) |
 | `meet_npc` | npc_id | добавляет в `player.known_npcs` |
+| `atmosphere_shift` | new_mood | временно переопределяет `atmosphere.mood` локации до конца сцены |
 
 ## Поля верхнего уровня
 
