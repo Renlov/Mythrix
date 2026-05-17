@@ -14,6 +14,7 @@
 6. [06-training-strategy.md](06-training-strategy.md) — Стратегия обучения (промптинг → fine-tune)
 7. [07-dataset-collection.md](07-dataset-collection.md) — Сбор датасета
 8. [08-project-decisions.md](08-project-decisions.md) — Решения по пилоту (язык, модель, сеттинг)
+9. [09-mood-catalog.md](09-mood-catalog.md) — Каталог атмосфер (7 mood)
 
 ## Ключевые принципы (TL;DR)
 
