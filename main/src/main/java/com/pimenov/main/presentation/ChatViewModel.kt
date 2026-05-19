@@ -18,6 +18,8 @@ data class ChatMessage(
     val isStreaming: Boolean = false,
     /** Hidden from UI but kept in conversation history sent to the model. */
     val hidden: Boolean = false,
+    /** Suggested actions parsed from the DM's [OPTIONS] block. Empty for user. */
+    val options: List<String> = emptyList(),
 )
 
 data class ChatState(
@@ -37,16 +39,9 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
     private var streamJob: Job? = null
 
     init {
-        // Auto-kickoff: send a hidden opening action so the DM describes the
-        // entry scene without the player having to type "вхожу в таверну".
         startSession(OPENING_ACTION)
     }
 
-    /**
-     * Sends a hidden kickoff that the model treats as the player's first action
-     * but the UI never shows. The first DM bubble is therefore the scene
-     * description, not a reply to something the user typed.
-     */
     private fun startSession(opening: String) {
         val kickoff = ChatMessage(nextId++, LlmMessage.Role.USER, opening, hidden = true)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
@@ -65,14 +60,14 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
 
         _state.update {
             it.copy(
-                messages = it.messages + userMsg + dmMsg,
+                // Strip prior options once the player has chosen — keeps the
+                // log clean and prevents stale chips from cluttering.
+                messages = it.messages.map { m -> m.copy(options = emptyList()) } + userMsg + dmMsg,
                 isSending = true,
                 error = null,
             )
         }
 
-        // History includes the hidden kickoff so the model keeps the scene
-        // continuity; we drop the just-added user + placeholder.
         val history = _state.value.messages
             .dropLast(2)
             .map { LlmMessage(it.role, it.text) }
@@ -96,11 +91,14 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
             }.onFailure { e ->
                 _state.update { it.copy(error = e.message ?: "Ошибка запроса") }
             }
+            // After streaming, parse [OPTIONS] and attach to the message.
+            val raw = buffer.toString()
+            val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
                     isSending = false,
                     messages = st.messages.map { m ->
-                        if (m.id == targetId) m.copy(isStreaming = false) else m
+                        if (m.id == targetId) m.copy(isStreaming = false, options = options) else m
                     },
                 )
             }
@@ -116,15 +114,37 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
             "Я открываю дверь и захожу в таверну. Опиши коротко, что я вижу."
 
         /**
-         * Strip the DM service tags ([NARRATIVE] header, [EVENTS] JSON block)
-         * so only narrative prose reaches the UI. Works during streaming —
-         * once `[EVENTS]` appears, everything after it is hidden.
+         * Strip DM service tags so only narrative prose reaches the UI.
+         * Cuts at the first of `[OPTIONS]` or `[EVENTS]` markers — whichever
+         * appears earlier. Removes the leading `[NARRATIVE]` header.
          */
         private fun cleanForDisplay(raw: String): String {
-            val withoutEvents = raw.substringBefore("[EVENTS]").trimEnd()
-            return withoutEvents
+            val cutAt = listOf("[OPTIONS]", "[EVENTS]")
+                .map { raw.indexOf(it) }
+                .filter { it >= 0 }
+                .minOrNull() ?: raw.length
+            return raw.substring(0, cutAt)
                 .removePrefix("[NARRATIVE]")
                 .trim()
+        }
+
+        /**
+         * Parses the `[OPTIONS]` block — lines starting with `-` until the
+         * next `[` marker. Returns up to 3 trimmed options or an empty list.
+         */
+        private fun parseOptions(raw: String): List<String> {
+            val start = raw.indexOf("[OPTIONS]")
+            if (start < 0) return emptyList()
+            val after = raw.substring(start + "[OPTIONS]".length)
+            val end = after.indexOf("[").let { if (it >= 0) it else after.length }
+            val block = after.substring(0, end)
+            return block.lineSequence()
+                .map { it.trim() }
+                .filter { it.startsWith("-") }
+                .map { it.removePrefix("-").trim() }
+                .filter { it.isNotEmpty() }
+                .take(3)
+                .toList()
         }
     }
 }

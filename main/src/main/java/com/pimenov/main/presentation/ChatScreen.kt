@@ -1,12 +1,16 @@
 package com.pimenov.main.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -32,7 +36,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.feature.api.LlmMessage
@@ -70,7 +79,10 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(visible, key = { it.id }) { msg ->
-                    MessageBubble(msg)
+                    MessageBubble(
+                        msg = msg,
+                        onOptionClick = { opt -> vm.send(opt) },
+                    )
                 }
             }
 
@@ -123,17 +135,16 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun MessageBubble(msg: ChatMessage) {
+private fun MessageBubble(msg: ChatMessage, onOptionClick: (String) -> Unit) {
     val isUser = msg.role == LlmMessage.Role.USER
     val bg = if (isUser) MaterialTheme.colorScheme.primaryContainer
     else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
     else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (isUser) Alignment.End else Alignment.Start
-    // DM bubbles take ~92% width to maximise readable text per screen;
-    // user bubbles ~80% so the user's own turns stay visually distinct.
-    val widthFraction = if (isUser) 0.80f else 0.92f
+    val widthFraction = if (isUser) 0.80f else 0.95f
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -147,10 +158,71 @@ private fun MessageBubble(msg: ChatMessage) {
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(
-                text = if (msg.text.isEmpty() && msg.isStreaming) "…" else msg.text,
+                text = if (msg.text.isEmpty() && msg.isStreaming) AnnotatedString("…")
+                else withBoldQuotes(msg.text),
                 color = fg,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+
+        if (msg.options.isNotEmpty() && !msg.isStreaming) {
+            Spacer(Modifier.height(4.dp))
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(widthFraction),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                msg.options.forEach { opt ->
+                    OptionChip(text = opt, onClick = { onOptionClick(opt) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionChip(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+/**
+ * Renders quoted speech (between `«…»` or straight `"…"`) in bold.
+ * Empty or unmatched quotes fall through as plain text.
+ */
+private fun withBoldQuotes(text: String): AnnotatedString = buildAnnotatedString {
+    if (text.isEmpty()) return@buildAnnotatedString
+    val bold = SpanStyle(fontWeight = FontWeight.Bold)
+    var i = 0
+    while (i < text.length) {
+        val ch = text[i]
+        val openIdx = when (ch) { '«' -> i; '"' -> i; else -> -1 }
+        if (openIdx < 0) {
+            append(ch)
+            i++
+            continue
+        }
+        val closeChar = if (ch == '«') '»' else '"'
+        val closeIdx = text.indexOf(closeChar, openIdx + 1)
+        if (closeIdx < 0) {
+            // Unmatched — append the rest as plain.
+            append(text.substring(openIdx))
+            return@buildAnnotatedString
+        }
+        withStyle(bold) {
+            append(text.substring(openIdx, closeIdx + 1))
+        }
+        i = closeIdx + 1
     }
 }
