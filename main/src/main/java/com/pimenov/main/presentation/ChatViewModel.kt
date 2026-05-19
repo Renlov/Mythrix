@@ -16,13 +16,17 @@ data class ChatMessage(
     val role: LlmMessage.Role,
     val text: String,
     val isStreaming: Boolean = false,
+    /** Hidden from UI but kept in conversation history sent to the model. */
+    val hidden: Boolean = false,
 )
 
 data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
     val isSending: Boolean = false,
     val error: String? = null,
-)
+) {
+    val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
+}
 
 class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
 
@@ -31,6 +35,26 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
 
     private var nextId = 0L
     private var streamJob: Job? = null
+
+    init {
+        // Auto-kickoff: send a hidden opening action so the DM describes the
+        // entry scene without the player having to type "вхожу в таверну".
+        startSession(OPENING_ACTION)
+    }
+
+    /**
+     * Sends a hidden kickoff that the model treats as the player's first action
+     * but the UI never shows. The first DM bubble is therefore the scene
+     * description, not a reply to something the user typed.
+     */
+    private fun startSession(opening: String) {
+        val kickoff = ChatMessage(nextId++, LlmMessage.Role.USER, opening, hidden = true)
+        val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
+        _state.update {
+            it.copy(messages = it.messages + kickoff + dmMsg, isSending = true)
+        }
+        streamAssistant(prompt = opening, history = emptyList(), targetId = dmMsg.id)
+    }
 
     fun send(userText: String) {
         val trimmed = userText.trim()
@@ -47,19 +71,25 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
             )
         }
 
+        // History includes the hidden kickoff so the model keeps the scene
+        // continuity; we drop the just-added user + placeholder.
         val history = _state.value.messages
-            .dropLast(2) // drop the just-added user + placeholder
+            .dropLast(2)
             .map { LlmMessage(it.role, it.text) }
 
+        streamAssistant(prompt = trimmed, history = history, targetId = dmMsg.id)
+    }
+
+    private fun streamAssistant(prompt: String, history: List<LlmMessage>, targetId: Long) {
         streamJob = viewModelScope.launch {
             val buffer = StringBuilder()
             runCatching {
-                engine.generate(trimmed, history).collect { delta ->
+                engine.generate(prompt, history).collect { delta ->
                     buffer.append(delta)
                     val snapshot = buffer.toString()
                     _state.update { st ->
                         st.copy(messages = st.messages.map { m ->
-                            if (m.id == dmMsg.id) m.copy(text = snapshot) else m
+                            if (m.id == targetId) m.copy(text = snapshot) else m
                         })
                     }
                 }
@@ -70,7 +100,7 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
                 st.copy(
                     isSending = false,
                     messages = st.messages.map { m ->
-                        if (m.id == dmMsg.id) m.copy(isStreaming = false) else m
+                        if (m.id == targetId) m.copy(isStreaming = false) else m
                     },
                 )
             }
@@ -79,5 +109,10 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
 
     fun clearError() {
         _state.update { it.copy(error = null) }
+    }
+
+    companion object {
+        private const val OPENING_ACTION =
+            "Я открываю дверь и захожу в таверну. Опиши, что я вижу, слышу и чувствую."
     }
 }

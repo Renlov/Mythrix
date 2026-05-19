@@ -5,13 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,8 +20,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,41 +40,45 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.feature.api.LlmMessage
 import org.koin.androidx.compose.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+    val visible = state.visibleMessages
+    LaunchedEffect(visible.size, visible.lastOrNull()?.text?.length) {
+        if (visible.isNotEmpty()) {
+            listState.animateScrollToItem(visible.lastIndex)
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
+    // Scaffold handles status/navigation insets; imePadding is applied only to
+    // the bottom input bar so the keyboard pushes the input row up without
+    // shifting the title/list to the top of the screen.
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Mythrix — Таверна",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .imePadding()
-                .navigationBarsPadding(),
+                .padding(innerPadding),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Text(
-                    "Mythrix — Таверна",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -83,10 +87,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                     .padding(horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (state.messages.isEmpty()) {
-                    item { Hint() }
-                }
-                items(state.messages, key = { it.id }) { msg ->
+                items(visible, key = { it.id }) { msg ->
                     MessageBubble(msg)
                 }
             }
@@ -102,6 +103,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .imePadding()
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -138,22 +140,6 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
 }
 
 @Composable
-private fun Hint() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 32.dp, start = 16.dp, end = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            "Опиши, что ты делаешь в таверне. Например: «оглядываюсь» или «подхожу к трактирщику».",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun MessageBubble(msg: ChatMessage) {
     val isUser = msg.role == LlmMessage.Role.USER
     val bg = if (isUser) MaterialTheme.colorScheme.primaryContainer
@@ -178,9 +164,6 @@ private fun MessageBubble(msg: ChatMessage) {
                 color = fg,
                 style = MaterialTheme.typography.bodyMedium,
             )
-        }
-        if (msg.isStreaming && msg.text.isNotEmpty()) {
-            Spacer(Modifier.width(0.dp))
         }
     }
 }
