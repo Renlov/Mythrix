@@ -70,6 +70,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 .statusBarsPadding()
                 .navigationBarsPadding(),
         ) {
+            QuestBanner(quest = state.quest)
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -176,6 +177,32 @@ private fun MessageBubble(msg: ChatMessage, onOptionClick: (String) -> Unit) {
                     OptionChip(text = opt, onClick = { onOptionClick(opt) })
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun QuestBanner(quest: QuestObjective) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Column {
+            Text(
+                text = "Цель · ${quest.title}",
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = quest.hint,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

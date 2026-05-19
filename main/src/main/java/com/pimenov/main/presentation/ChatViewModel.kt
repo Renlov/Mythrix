@@ -26,6 +26,7 @@ data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
     val isSending: Boolean = false,
     val error: String? = null,
+    val quest: QuestObjective = TavernPilotQuest.initial,
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
@@ -111,7 +112,9 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
 
     companion object {
         private const val OPENING_ACTION =
-            "Я открываю дверь и захожу в таверну. Опиши коротко, что я вижу."
+            "Я ищу свою младшую сестру Айну — полгода назад она ушла по этой дороге. " +
+                "Захожу в таверну на исходе сил, надеюсь расспросить и переночевать. " +
+                "Опиши коротко, что я вижу."
 
         /**
          * Strip DM service tags so only narrative prose reaches the UI.
