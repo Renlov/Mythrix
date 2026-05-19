@@ -86,10 +86,10 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
             runCatching {
                 engine.generate(prompt, history).collect { delta ->
                     buffer.append(delta)
-                    val snapshot = buffer.toString()
+                    val display = cleanForDisplay(buffer.toString())
                     _state.update { st ->
                         st.copy(messages = st.messages.map { m ->
-                            if (m.id == targetId) m.copy(text = snapshot) else m
+                            if (m.id == targetId) m.copy(text = display) else m
                         })
                     }
                 }
@@ -113,6 +113,18 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
 
     companion object {
         private const val OPENING_ACTION =
-            "Я открываю дверь и захожу в таверну. Опиши, что я вижу, слышу и чувствую."
+            "Я открываю дверь и захожу в таверну. Опиши коротко, что я вижу."
+
+        /**
+         * Strip the DM service tags ([NARRATIVE] header, [EVENTS] JSON block)
+         * so only narrative prose reaches the UI. Works during streaming —
+         * once `[EVENTS]` appears, everything after it is hidden.
+         */
+        private fun cleanForDisplay(raw: String): String {
+            val withoutEvents = raw.substringBefore("[EVENTS]").trimEnd()
+            return withoutEvents
+                .removePrefix("[NARRATIVE]")
+                .trim()
+        }
     }
 }

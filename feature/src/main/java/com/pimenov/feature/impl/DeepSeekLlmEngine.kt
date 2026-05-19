@@ -81,7 +81,7 @@ class DeepSeekLlmEngine(
             messages = messages,
             stream = true,
             temperature = 0.8,
-            maxTokens = 800,
+            maxTokens = 400,
         )
 
         client.preparePost(ENDPOINT) {

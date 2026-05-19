@@ -8,9 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -20,11 +21,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,52 +38,36 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.feature.api.LlmMessage
 import org.koin.androidx.compose.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-
     val visible = state.visibleMessages
+
     LaunchedEffect(visible.size, visible.lastOrNull()?.text?.length) {
         if (visible.isNotEmpty()) {
             listState.animateScrollToItem(visible.lastIndex)
         }
     }
 
-    // Scaffold handles status/navigation insets; imePadding is applied only to
-    // the bottom input bar so the keyboard pushes the input row up without
-    // shifting the title/list to the top of the screen.
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Mythrix — Таверна",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { innerPadding ->
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .statusBarsPadding()
+                .navigationBarsPadding(),
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(visible, key = { it.id }) { msg ->
                     MessageBubble(msg)
@@ -96,7 +78,8 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 Text(
                     err,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                 )
             }
 
@@ -104,9 +87,9 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .imePadding()
-                    .padding(12.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 OutlinedTextField(
                     value = input,
@@ -115,7 +98,8 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                     placeholder = { Text("Что ты делаешь?") },
                     enabled = !state.isSending,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    maxLines = 4,
+                    maxLines = 3,
+                    textStyle = MaterialTheme.typography.bodyMedium,
                 )
                 Button(
                     onClick = {
@@ -127,7 +111,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 ) {
                     if (state.isSending) {
                         CircularProgressIndicator(
-                            modifier = Modifier.width(20.dp),
+                            modifier = Modifier.width(18.dp),
                             strokeWidth = 2.dp,
                         )
                     } else {
@@ -147,6 +131,9 @@ private fun MessageBubble(msg: ChatMessage) {
     val fg = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
     else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (isUser) Alignment.End else Alignment.Start
+    // DM bubbles take ~92% width to maximise readable text per screen;
+    // user bubbles ~80% so the user's own turns stay visually distinct.
+    val widthFraction = if (isUser) 0.80f else 0.92f
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -154,10 +141,10 @@ private fun MessageBubble(msg: ChatMessage) {
     ) {
         Box(
             modifier = Modifier
-                .widthIn(max = 320.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth(widthFraction)
+                .clip(RoundedCornerShape(14.dp))
                 .background(bg)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(
                 text = if (msg.text.isEmpty() && msg.isStreaming) "…" else msg.text,
