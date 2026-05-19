@@ -43,9 +43,6 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":uikit"))
     implementation(project(":main"))
-    implementation(project(":settings"))
-    implementation(project(":character"))
-    implementation(project(":game"))
     implementation(project(":feature"))
 
     implementation(platform(libs.androidx.compose.bom))

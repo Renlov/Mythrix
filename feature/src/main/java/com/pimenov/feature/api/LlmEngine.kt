@@ -9,5 +9,6 @@ data class LlmMessage(val role: Role, val content: String) {
 interface LlmEngine {
     val id: String
     suspend fun isReady(): Boolean
-    fun generate(prompt: String, history: List<LlmMessage>): Flow<String>
+    /** Streams DM response tokens. System prompt is composed inside the engine. */
+    fun generate(userPrompt: String, history: List<LlmMessage>): Flow<String>
 }

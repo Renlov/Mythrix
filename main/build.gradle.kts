@@ -28,9 +28,7 @@ dependencies {
     api(project(":core"))
     api(project(":uikit"))
     api(project(":feature"))
-    api(project(":character"))
-    api(project(":game"))
-    api(project(":settings"))
-    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.android)
 }

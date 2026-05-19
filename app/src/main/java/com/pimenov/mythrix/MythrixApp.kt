@@ -1,12 +1,9 @@
 package com.pimenov.mythrix
 
 import android.app.Application
-import com.pimenov.character.di.characterModule
 import com.pimenov.core.di.coreModule
 import com.pimenov.feature.di.featureModule
-import com.pimenov.game.di.gameModule
 import com.pimenov.main.di.mainModule
-import com.pimenov.settings.di.settingsModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
@@ -21,10 +18,7 @@ class MythrixApp : Application() {
             modules(
                 coreModule(),
                 featureModule(),
-                characterModule(),
-                gameModule(),
                 mainModule(),
-                settingsModule()
             )
         }
     }
