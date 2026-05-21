@@ -131,6 +131,7 @@ class GameStateRepository(
         val obj = json.parseToJsonElement(readAsset(PLAYER_PATH)).jsonObject
         val name = obj["name"]?.jsonPrimitive?.contentOrNull() ?: defaultName
         val playerClass = obj["class"]?.jsonPrimitive?.contentOrNull() ?: "wanderer"
+        val locationId = obj["location_id"]?.jsonPrimitive?.contentOrNull() ?: "loc_tavern_last_rest"
         val hp = obj["hp"]?.jsonPrimitive?.int ?: 0
         val maxHp = obj["max_hp"]?.jsonPrimitive?.int ?: hp
         val gold = obj["gold"]?.jsonPrimitive?.int ?: 0
@@ -139,6 +140,7 @@ class GameStateRepository(
         val player = PlayerState(
             name = name,
             playerClass = playerClass,
+            locationId = locationId,
             hp = hp,
             maxHp = maxHp,
             gold = gold,

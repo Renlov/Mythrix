@@ -14,9 +14,10 @@ fun featureModule() = module {
     single<LlmEngine> {
         val ctx = androidContext()
         val game = get<GameStateRepository>()
+        val catalog = get<WorldCatalog>()
         DeepSeekLlmEngine(
             systemPromptProvider = {
-                TavernWorldBibleLoader.buildSystemPrompt(ctx, game.state.value, game.journal())
+                TavernWorldBibleLoader.buildSystemPrompt(ctx, game.state.value, game.journal(), catalog)
             }
         )
     }

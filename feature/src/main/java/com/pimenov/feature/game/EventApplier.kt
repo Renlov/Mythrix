@@ -22,7 +22,20 @@ object EventApplier {
                 else -> s
             }
         }
-        return s
+        return changeLocation(s, events.locationChange, catalog)
+    }
+
+    /**
+     * Moves the player only to a location connected to the current one. An
+     * unknown or non-adjacent target is ignored, so the DM can't teleport the
+     * player off the map.
+     */
+    private fun changeLocation(state: PlayerState, target: String?, catalog: WorldCatalog): PlayerState {
+        if (target == null || target == state.locationId) return state
+        if (!catalog.locationExists(target)) return state
+        val current = catalog.location(state.locationId)
+        if (current != null && target !in current.connections) return state
+        return state.copy(locationId = target)
     }
 
     private fun addItem(state: PlayerState, itemId: String?, catalog: WorldCatalog): PlayerState {

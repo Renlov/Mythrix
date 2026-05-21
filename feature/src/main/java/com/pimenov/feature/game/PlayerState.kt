@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 data class PlayerState(
     val name: String,
     val playerClass: String = "wanderer",
+    val locationId: String = "loc_tavern_last_rest",
     val hp: Int,
     val maxHp: Int,
     val gold: Int,
