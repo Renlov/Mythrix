@@ -46,6 +46,7 @@
 - `{"type":"attack","actor":"...","target":"...","weapon":"..."}`
 - `{"type":"skill_check","actor":"player_main","skill":"persuasion|insight|stealth|...","difficulty":"easy|medium|hard"}`
 - `{"type":"meet_npc","npc_id":"..."}`
+- `{"type":"quest_advance","quest_id":"...","new_stage":N}` — когда сработал триггер стадии квеста (см. [QUESTS] и `_quest_stages`). Молча: игрок не видит, не озвучивай в [NARRATIVE].
 
 # Атмосфера
 

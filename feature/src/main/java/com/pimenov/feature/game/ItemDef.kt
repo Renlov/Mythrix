@@ -1,0 +1,16 @@
+package com.pimenov.feature.game
+
+import kotlinx.serialization.Serializable
+
+/**
+ * Catalog entry from `world/tavern/items.json`. Only fields the engine needs
+ * are typed; the rest (damage_die, weight, …) are ignored on parse.
+ */
+@Serializable
+data class ItemDef(
+    val id: String,
+    val name: String,
+    val type: String = "",
+    val price: Int = 0,
+    val description: String = "",
+)

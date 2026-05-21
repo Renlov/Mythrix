@@ -23,10 +23,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,8 +55,13 @@ import org.koin.androidx.compose.koinViewModel
 fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
+    var showSheet by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val visible = state.visibleMessages
+
+    if (showSheet) {
+        CharacterSheet(player = state.player, onDismiss = { showSheet = false })
+    }
 
     LaunchedEffect(visible.size, visible.lastOrNull()?.text?.length) {
         if (visible.isNotEmpty()) {
@@ -70,7 +79,17 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 .statusBarsPadding()
                 .navigationBarsPadding(),
         ) {
-            QuestBanner(quest = state.quest)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                QuestBanner(quest = state.quest, modifier = Modifier.weight(1f))
+                CharacterButton(
+                    hp = state.player.hp,
+                    maxHp = state.player.maxHp,
+                    onClick = { showSheet = true },
+                )
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -182,11 +201,10 @@ private fun MessageBubble(msg: ChatMessage, onOptionClick: (String) -> Unit) {
 }
 
 @Composable
-private fun QuestBanner(quest: QuestObjective) {
+private fun QuestBanner(quest: QuestObjective, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp)
+        modifier = modifier
+            .padding(start = 8.dp, top = 6.dp, bottom = 6.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.tertiaryContainer)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -203,6 +221,88 @@ private fun QuestBanner(quest: QuestObjective) {
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+    }
+}
+
+/** Top-right pill showing current HP; tap to open the full character sheet. */
+@Composable
+private fun CharacterButton(hp: Int, maxHp: Int, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .padding(horizontal = 8.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = "♥ $hp/$maxHp",
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = player.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Здоровье · ${player.hp}/${player.maxHp}",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                LinearProgressIndicator(
+                    progress = {
+                        if (player.maxHp > 0) player.hp.toFloat() / player.maxHp else 0f
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                )
+            }
+
+            Text(
+                text = "Золото · ${player.gold}",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+
+            Text(
+                text = "Инвентарь",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (player.inventory.isEmpty()) {
+                Text(
+                    text = "Пусто.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                player.inventory.forEach { item ->
+                    Text(
+                        text = "• $item",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
         }
     }
 }

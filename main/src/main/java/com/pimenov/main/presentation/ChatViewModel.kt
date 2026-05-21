@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.api.LlmMessage
+import com.pimenov.feature.game.EventParser
+import com.pimenov.feature.game.GameStateRepository
+import com.pimenov.feature.game.WorldCatalog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,11 +30,16 @@ data class ChatState(
     val isSending: Boolean = false,
     val error: String? = null,
     val quest: QuestObjective = TavernPilotQuest.initial,
+    val player: PlayerSheet = PlayerSheet(),
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
 
-class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
+class ChatViewModel(
+    private val engine: LlmEngine,
+    private val game: GameStateRepository,
+    private val catalog: WorldCatalog,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
@@ -40,6 +48,16 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
     private var streamJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            game.state.collect { ps ->
+                _state.update {
+                    it.copy(
+                        player = ps.toSheet(catalog),
+                        quest = TavernPilotQuest.objectiveFor(ps.questStages),
+                    )
+                }
+            }
+        }
         startSession(OPENING_ACTION)
     }
 
@@ -92,8 +110,10 @@ class ChatViewModel(private val engine: LlmEngine) : ViewModel() {
             }.onFailure { e ->
                 _state.update { it.copy(error = e.message ?: "Ошибка запроса") }
             }
-            // After streaming, parse [OPTIONS] and attach to the message.
+            // After streaming, apply [EVENTS] to game state, then parse
+            // [OPTIONS] and attach to the message.
             val raw = buffer.toString()
+            EventParser.parse(raw)?.let { game.apply(it) }
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(

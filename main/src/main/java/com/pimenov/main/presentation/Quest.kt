@@ -11,8 +11,22 @@ data class QuestObjective(
 )
 
 object TavernPilotQuest {
-    val initial = QuestObjective(
-        title = "Найти Айну",
-        hint = "Расспроси людей в таверне. Кто-нибудь должен был её видеть.",
-    )
+    private const val MAIN_QUEST = "quest_find_aina"
+
+    /** Derives the banner objective from the live quest stage. */
+    fun objectiveFor(questStages: Map<String, Int>): QuestObjective {
+        val stage = questStages[MAIN_QUEST] ?: 0
+        return when (stage) {
+            0 -> QuestObjective(
+                title = "Найти Айну",
+                hint = "Расспроси людей в таверне. Кто-нибудь должен был её видеть.",
+            )
+            else -> QuestObjective(
+                title = "Найти Айну",
+                hint = "Кто-то здесь её помнит. Тяни за ниточку дальше.",
+            )
+        }
+    }
+
+    val initial = objectiveFor(emptyMap())
 }

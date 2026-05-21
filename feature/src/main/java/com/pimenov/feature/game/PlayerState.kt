@@ -1,0 +1,18 @@
+package com.pimenov.feature.game
+
+import kotlinx.serialization.Serializable
+
+/**
+ * Live, mutable-by-copy state of the player during a session.
+ * Numbers (hp, gold) are owned by the engine — the DM never computes them.
+ * [questStages] maps quest id → current stage; advanced via `quest_advance`.
+ */
+@Serializable
+data class PlayerState(
+    val name: String,
+    val hp: Int,
+    val maxHp: Int,
+    val gold: Int,
+    val inventoryIds: List<String>,
+    val questStages: Map<String, Int>,
+)

@@ -5,5 +5,5 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 fun mainModule() = module {
-    viewModel { ChatViewModel(get()) }
+    viewModel { ChatViewModel(get(), get(), get()) }
 }
