@@ -81,6 +81,10 @@ class ChatViewModel(
         game.buy(itemId)
     }
 
+    fun toggleEquip(itemId: String) {
+        game.toggleEquip(itemId)
+    }
+
     fun openShop() = _state.update { it.copy(showShop = true) }
 
     fun dismissShop() = _state.update { it.copy(showShop = false) }

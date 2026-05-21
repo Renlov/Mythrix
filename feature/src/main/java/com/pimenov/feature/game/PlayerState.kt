@@ -16,4 +16,6 @@ data class PlayerState(
     val gold: Int,
     val inventoryIds: List<String>,
     val questStages: Map<String, Int>,
+    /** Subset of [inventoryIds] the player has equipped (worn). */
+    val equippedIds: Set<String> = emptySet(),
 )

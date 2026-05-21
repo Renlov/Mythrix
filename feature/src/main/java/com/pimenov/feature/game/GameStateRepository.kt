@@ -70,6 +70,15 @@ class GameStateRepository(
         }
     }
 
+    /** Toggles whether an owned item is equipped. No-op for items not held. */
+    fun toggleEquip(itemId: String) {
+        val cur = _state.value
+        if (itemId !in cur.inventoryIds) return
+        val equipped = if (itemId in cur.equippedIds) cur.equippedIds - itemId else cur.equippedIds + itemId
+        _state.value = cur.copy(equippedIds = equipped)
+        persist()
+    }
+
     fun buy(itemId: String): Boolean {
         val before = _state.value
         val events = EventsBlock(

@@ -3,10 +3,14 @@ package com.pimenov.main.presentation
 import com.pimenov.feature.game.PlayerState
 import com.pimenov.feature.game.WorldCatalog
 
-/** An inventory entry ready for the sheet: display name + type for the icon. */
+/** An inventory entry ready for the sheet: name, type, combat stats, equip flag. */
 data class InventoryItem(
+    val id: String,
     val name: String,
     val type: String,
+    val damageDie: String? = null,
+    val armorBonus: Int? = null,
+    val equipped: Boolean = false,
 )
 
 /** A merchant's item offered in the shop menu. */
@@ -43,6 +47,13 @@ fun PlayerState.toSheet(catalog: WorldCatalog): PlayerSheet = PlayerSheet(
     gold = gold,
     inventory = inventoryIds.map { id ->
         val item = catalog.byId(id)
-        InventoryItem(name = item?.name ?: id, type = item?.type.orEmpty())
+        InventoryItem(
+            id = id,
+            name = item?.name ?: id,
+            type = item?.type.orEmpty(),
+            damageDie = item?.damageDie,
+            armorBonus = item?.armorBonus,
+            equipped = id in equippedIds,
+        )
     },
 )

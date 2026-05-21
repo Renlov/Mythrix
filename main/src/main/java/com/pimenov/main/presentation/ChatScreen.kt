@@ -1,10 +1,13 @@
 package com.pimenov.main.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,6 +56,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -71,7 +75,11 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     val visible = state.visibleMessages
 
     if (showSheet) {
-        CharacterSheet(player = state.player, onDismiss = { showSheet = false })
+        CharacterSheet(
+            player = state.player,
+            onEquipToggle = { vm.toggleEquip(it) },
+            onDismiss = { showSheet = false },
+        )
     }
     if (state.showShop) {
         ShopSheet(
@@ -265,7 +273,11 @@ private fun TopIconButton(icon: Int, contentDescription: String, onClick: () -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
+private fun CharacterSheet(
+    player: PlayerSheet,
+    onEquipToggle: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val sheetState = rememberModalBottomSheetState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -327,10 +339,10 @@ private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
             )
 
-            InventorySection("Сумка", player.inventory.filter { it.type !in CATEGORY_TYPES })
-            InventorySection("Оружие", player.inventory.filter { it.type == "weapon" })
-            InventorySection("Броня", player.inventory.filter { it.type == "armor" })
-            InventorySection("Кольца", player.inventory.filter { it.type == "ring" })
+            InventorySection("Сумка", player.inventory.filter { it.type !in CATEGORY_TYPES }, equippable = false, onEquipToggle)
+            InventorySection("Оружие", player.inventory.filter { it.type == "weapon" }, equippable = true, onEquipToggle)
+            InventorySection("Броня", player.inventory.filter { it.type == "armor" }, equippable = true, onEquipToggle)
+            InventorySection("Кольца", player.inventory.filter { it.type == "ring" }, equippable = true, onEquipToggle)
         }
     }
 }
@@ -338,9 +350,15 @@ private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
 /** Item types that have their own sheet section; everything else goes to «Сумка». */
 private val CATEGORY_TYPES = setOf("weapon", "armor", "ring")
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun InventorySection(title: String, items: List<InventoryItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun InventorySection(
+    title: String,
+    items: List<InventoryItem>,
+    equippable: Boolean,
+    onToggle: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
@@ -353,34 +371,79 @@ private fun InventorySection(title: String, items: List<InventoryItem>) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            items.forEach { InventoryRow(it) }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items.forEach { ItemCard(it, equippable, onToggle) }
+            }
         }
     }
 }
 
 @Composable
-private fun InventoryRow(item: InventoryItem) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(iconForItemType(item.type)),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
+private fun ItemCard(item: InventoryItem, equippable: Boolean, onToggle: (String) -> Unit) {
+    val borderColor = if (item.equipped) MaterialTheme.colorScheme.primary else Color.Transparent
+    Column(
+        modifier = Modifier
+            .width(76.dp)
+            .then(if (equippable) Modifier.clickable { onToggle(item.id) } else Modifier),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Box(contentAlignment = Alignment.TopEnd) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(2.dp, borderColor, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(iconForItemType(item.type)),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            if (item.equipped) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "✓",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
         }
-        Spacer(Modifier.width(12.dp))
         Text(
             text = item.name,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
         )
+        itemStat(item)?.let { stat ->
+            Text(
+                text = stat,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+private fun itemStat(item: InventoryItem): String? = when {
+    item.damageDie != null -> "Урон ${item.damageDie}"
+    item.armorBonus != null -> "Броня +${item.armorBonus}"
+    else -> null
 }
 
 private fun iconForItemType(type: String): Int = when (type) {
