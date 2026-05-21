@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,6 +38,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -43,7 +47,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -339,10 +345,7 @@ private fun CharacterSheet(
                 style = MaterialTheme.typography.bodyLarge,
             )
 
-            InventorySection("Сумка", player.inventory.filter { it.type !in CATEGORY_TYPES }, equippable = false, onEquipToggle)
-            InventorySection("Оружие", player.inventory.filter { it.type == "weapon" }, equippable = true, onEquipToggle)
-            InventorySection("Броня", player.inventory.filter { it.type == "armor" }, equippable = true, onEquipToggle)
-            InventorySection("Кольца", player.inventory.filter { it.type == "ring" }, equippable = true, onEquipToggle)
+            InventoryTabs(inventory = player.inventory, onToggle = onEquipToggle)
         }
     }
 }
@@ -350,35 +353,73 @@ private fun CharacterSheet(
 /** Item types that have their own sheet section; everything else goes to «Сумка». */
 private val CATEGORY_TYPES = setOf("weapon", "armor", "ring")
 
+private data class InventoryCategory(
+    val title: String,
+    val equippable: Boolean,
+    val matches: (InventoryItem) -> Boolean,
+)
+
+private val INVENTORY_CATEGORIES = listOf(
+    InventoryCategory("Оружие", equippable = true) { it.type == "weapon" },
+    InventoryCategory("Броня", equippable = true) { it.type == "armor" },
+    InventoryCategory("Кольца", equippable = true) { it.type == "ring" },
+    InventoryCategory("Сумка", equippable = false) { it.type !in CATEGORY_TYPES },
+)
+
+/** Horizontal tabbed pager: tap a category tab or swipe to see its items. */
+@Composable
+private fun InventoryTabs(inventory: List<InventoryItem>, onToggle: (String) -> Unit) {
+    val pagerState = rememberPagerState(pageCount = { INVENTORY_CATEGORIES.size })
+    val scope = rememberCoroutineScope()
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+            INVENTORY_CATEGORIES.forEachIndexed { index, category ->
+                Tab(
+                    selected = pagerState.currentPage == index,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                    text = { Text(category.title, style = MaterialTheme.typography.labelLarge) },
+                )
+            }
+        }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp),
+        ) { page ->
+            val category = INVENTORY_CATEGORIES[page]
+            InventoryPage(
+                items = inventory.filter(category.matches),
+                equippable = category.equippable,
+                onToggle = onToggle,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun InventorySection(
-    title: String,
+private fun InventoryPage(
     items: List<InventoryItem>,
     equippable: Boolean,
     onToggle: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (items.isEmpty()) {
         Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            text = "Пусто",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
         )
-        if (items.isEmpty()) {
-            Text(
-                text = "Пусто",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items.forEach { ItemCard(it, equippable, onToggle) }
-            }
-        }
+        return
+    }
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items.forEach { ItemCard(it, equippable, onToggle) }
     }
 }
 

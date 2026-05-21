@@ -70,11 +70,24 @@ class GameStateRepository(
         }
     }
 
-    /** Toggles whether an owned item is equipped. No-op for items not held. */
+    /**
+     * Toggles whether an owned item is equipped. One item per type slot —
+     * equipping a weapon unequips any other weapon, and so on. No-op for
+     * items not held.
+     */
     fun toggleEquip(itemId: String) {
         val cur = _state.value
         if (itemId !in cur.inventoryIds) return
-        val equipped = if (itemId in cur.equippedIds) cur.equippedIds - itemId else cur.equippedIds + itemId
+        val equipped = cur.equippedIds.toMutableSet()
+        if (itemId in equipped) {
+            equipped.remove(itemId)
+        } else {
+            val type = catalog.byId(itemId)?.type
+            if (type != null) {
+                equipped.removeAll { other -> catalog.byId(other)?.type == type }
+            }
+            equipped.add(itemId)
+        }
         _state.value = cur.copy(equippedIds = equipped)
         persist()
     }

@@ -12,6 +12,18 @@
     "description": "Короткий нож с деревянной рукоятью. Кейн носит его на поясе сколько себя помнит. Чаще режет хлеб, чем что-то ещё."
   },
   {
+    "id": "item_rags",
+    "name": "Тряпьё",
+    "type": "armor",
+    "subtype": "light",
+    "armor_bonus": 1,
+    "weight": 0.5,
+    "price": 1,
+    "location_id": null,
+    "owner_id": "player_main",
+    "description": "Несколько слоёв грубой ткани, перетянутых ремнём. Не защита — но хоть что-то между кожей и клинком."
+  },
+  {
     "id": "item_iron_sword",
     "name": "Железный меч",
     "type": "weapon",
