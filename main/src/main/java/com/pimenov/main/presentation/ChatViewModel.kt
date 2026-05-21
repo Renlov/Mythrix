@@ -143,7 +143,11 @@ class ChatViewModel(
             // [OPTIONS] and attach to the message.
             val raw = buffer.toString()
             EventParser.parse(raw)?.let { game.apply(it) }
-            if (playerTurn) maybeAdvanceFindAina(prompt, cleanForDisplay(raw))
+            if (playerTurn) {
+                val narrative = cleanForDisplay(raw)
+                maybeAdvanceFindAina(prompt, narrative)
+                maybeAdvanceDragon(prompt, narrative)
+            }
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
@@ -169,7 +173,24 @@ class ChatViewModel(
         val revealed = narrative.lowercase().let { n ->
             DIRECTION_MARKERS.any { n.contains(it) }
         }
-        if (revealed) game.advanceQuest("quest_find_aina", 1)
+        if (revealed) game.advanceQuest(TavernPilotQuest.MAIN_QUEST, 1)
+    }
+
+    /**
+     * Drives the dragon-line goals. Stage 1 (узнать опасность): the player
+     * asks about the north/dragon and the DM confirms the threat. Stage 2
+     * (решить идти): the player explicitly offers to go with the warriors —
+     * a deliberate statement, so detected on the player's own line.
+     */
+    private fun maybeAdvanceDragon(playerText: String, narrative: String) {
+        val low = playerText.lowercase()
+        if (JOIN_MARKERS.any { low.contains(it) }) {
+            game.advanceQuest(TavernPilotQuest.DRAGON_QUEST, 2)
+            return
+        }
+        val askedDanger = DANGER_MARKERS.any { low.contains(it) }
+        val confirmedDanger = narrative.lowercase().let { n -> DANGER_MARKERS.any { n.contains(it) } }
+        if (askedDanger && confirmedDanger) game.advanceQuest(TavernPilotQuest.DRAGON_QUEST, 1)
     }
 
     fun clearError() {
@@ -183,6 +204,18 @@ class ChatViewModel(
         /** Words in the DM narrative that signal Aina's direction was revealed. */
         private val DIRECTION_MARKERS = listOf(
             "север", "тракт", "на север", "ушла", "дорог", "отрог",
+        )
+
+        /** Topic words for the northern threat (dragon, mines, spur). */
+        private val DANGER_MARKERS = listOf(
+            "дракон", "шахт", "отрог", "логов", "выработк", "налёт", "сожг",
+        )
+
+        /** Player phrases that mean "I'll go with the warriors". */
+        private val JOIN_MARKERS = listOf(
+            "пойду с вами", "иду с вами", "пойду с воин", "иду с воин",
+            "присоедин", "возьмите меня", "пойдём вместе", "идти с вами",
+            "идём вместе", "с вами на рассвете",
         )
 
         private const val OPENING_ACTION =

@@ -18,15 +18,19 @@ data class QuestObjective(
 )
 
 object TavernPilotQuest {
-    private const val MAIN_QUEST = "quest_find_aina"
+    const val MAIN_QUEST = "quest_find_aina"
+    const val DRAGON_QUEST = "quest_slay_dragon"
 
     fun objectiveFor(questStages: Map<String, Int>, hasWeapon: Boolean): QuestObjective {
         val foundDirection = (questStages[MAIN_QUEST] ?: 0) >= 1
+        val dragonStage = questStages[DRAGON_QUEST] ?: 0
         return QuestObjective(
             title = "Найти Айну, собраться в путь",
             steps = listOf(
                 QuestStep("Узнать, куда ушла Айна", foundDirection),
                 QuestStep("Купить оружие у трактирщика", hasWeapon),
+                QuestStep("Узнать, что ждёт на севере", dragonStage >= 1),
+                QuestStep("Решить, идти ли с воинами на рассвете", dragonStage >= 2),
             ),
         )
     }
@@ -38,6 +42,9 @@ object TavernPilotQuest {
     fun leadsFor(questStages: Map<String, Int>): List<String> = buildList {
         if ((questStages[MAIN_QUEST] ?: 0) >= 1) {
             add("Айна полгода назад спрашивала, как короче выйти на северный тракт.")
+        }
+        if ((questStages[DRAGON_QUEST] ?: 0) >= 1) {
+            add("Логово дракона — старая выработка на северном отроге. Воины уходят туда на рассвете.")
         }
     }
 
