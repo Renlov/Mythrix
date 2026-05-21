@@ -14,16 +14,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -49,6 +53,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.feature.api.LlmMessage
+import com.pimenov.main.R
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -84,11 +89,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 QuestBanner(quest = state.quest, modifier = Modifier.weight(1f))
-                CharacterButton(
-                    hp = state.player.hp,
-                    maxHp = state.player.maxHp,
-                    onClick = { showSheet = true },
-                )
+                CharacterButton(onClick = { showSheet = true })
             }
             LazyColumn(
                 state = listState,
@@ -225,22 +226,22 @@ private fun QuestBanner(quest: QuestObjective, modifier: Modifier = Modifier) {
     }
 }
 
-/** Top-right pill showing current HP; tap to open the full character sheet. */
+/** Top-right avatar icon; tap to open the full character sheet. */
 @Composable
-private fun CharacterButton(hp: Int, maxHp: Int, onClick: () -> Unit) {
+private fun CharacterButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .padding(horizontal = 8.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.secondaryContainer)
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(8.dp),
     ) {
-        Text(
-            text = "♥ $hp/$maxHp",
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
+        Icon(
+            painter = painterResource(R.drawable.ic_avatar),
+            contentDescription = "Персонаж",
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -255,13 +256,38 @@ private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = player.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
+            // Photo (left) + name and class (right).
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_avatar),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = player.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = player.className,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -297,14 +323,43 @@ private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
                 )
             } else {
                 player.inventory.forEach { item ->
-                    Text(
-                        text = "• $item",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    InventoryRow(item)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun InventoryRow(item: InventoryItem) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(iconForItemType(item.type)),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = item.name,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+private fun iconForItemType(type: String): Int = when (type) {
+    "weapon" -> R.drawable.ic_item_weapon
+    "armor" -> R.drawable.ic_item_armor
+    "consumable" -> R.drawable.ic_item_consumable
+    else -> R.drawable.ic_item_generic
 }
 
 @Composable

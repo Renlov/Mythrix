@@ -74,6 +74,7 @@ class GameStateRepository(
     private fun seedFromAssets(): SaveData {
         val obj = json.parseToJsonElement(readAsset(PLAYER_PATH)).jsonObject
         val name = obj["name"]?.jsonPrimitive?.contentOrNull() ?: defaultName
+        val playerClass = obj["class"]?.jsonPrimitive?.contentOrNull() ?: "wanderer"
         val hp = obj["hp"]?.jsonPrimitive?.int ?: 0
         val maxHp = obj["max_hp"]?.jsonPrimitive?.int ?: hp
         val gold = obj["gold"]?.jsonPrimitive?.int ?: 0
@@ -81,6 +82,7 @@ class GameStateRepository(
         val quests = obj["active_quests"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
         val player = PlayerState(
             name = name,
+            playerClass = playerClass,
             hp = hp,
             maxHp = maxHp,
             gold = gold,

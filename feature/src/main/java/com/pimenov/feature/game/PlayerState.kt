@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class PlayerState(
     val name: String,
+    val playerClass: String = "wanderer",
     val hp: Int,
     val maxHp: Int,
     val gold: Int,
