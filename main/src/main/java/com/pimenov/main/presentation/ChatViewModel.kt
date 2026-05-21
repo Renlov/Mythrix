@@ -34,6 +34,8 @@ data class ChatState(
     val showShop: Boolean = false,
     /** Latest DM-suggested actions, shown in the action picker beside the input. */
     val currentOptions: List<String> = emptyList(),
+    /** Read-only leads the player has uncovered, shown in the same menu. */
+    val leads: List<String> = emptyList(),
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
@@ -65,6 +67,7 @@ class ChatViewModel(
                     it.copy(
                         player = ps.toSheet(catalog),
                         quest = TavernPilotQuest.objectiveFor(ps.questStages, hasWeapon),
+                        leads = TavernPilotQuest.leadsFor(ps.questStages),
                         ownedItemIds = ps.inventoryIds.toSet(),
                     )
                 }

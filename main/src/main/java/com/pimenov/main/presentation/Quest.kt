@@ -31,5 +31,15 @@ object TavernPilotQuest {
         )
     }
 
+    /**
+     * Leads the player has uncovered, derived deterministically from quest
+     * stages. Read-only notes shown in the action menu's «Зацепки» section.
+     */
+    fun leadsFor(questStages: Map<String, Int>): List<String> = buildList {
+        if ((questStages[MAIN_QUEST] ?: 0) >= 1) {
+            add("Айна полгода назад спрашивала, как короче выйти на северный тракт.")
+        }
+    }
+
     val initial = objectiveFor(emptyMap(), hasWeapon = false)
 }

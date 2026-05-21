@@ -145,6 +145,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
             ) {
                 ActionPicker(
                     options = state.currentOptions,
+                    leads = state.leads,
                     enabled = !state.isSending,
                     onPick = { vm.send(it) },
                 )
@@ -462,11 +463,19 @@ private fun WareRow(ware: Ware, owned: Boolean, canAfford: Boolean, onBuy: () ->
     }
 }
 
-/** Icon left of the input that opens a menu of the DM's suggested actions. */
+/**
+ * Icon left of the input that opens a menu with two sections: the DM's
+ * suggested actions (clickable) and read-only «Зацепки» the player uncovered.
+ */
 @Composable
-private fun ActionPicker(options: List<String>, enabled: Boolean, onPick: (String) -> Unit) {
+private fun ActionPicker(
+    options: List<String>,
+    leads: List<String>,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
-    val active = enabled && options.isNotEmpty()
+    val active = options.isNotEmpty() || leads.isNotEmpty()
     Box {
         Box(
             modifier = Modifier
@@ -480,24 +489,50 @@ private fun ActionPicker(options: List<String>, enabled: Boolean, onPick: (Strin
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_actions),
-                contentDescription = "Действия",
+                contentDescription = "Действия и зацепки",
                 tint = if (active) MaterialTheme.colorScheme.onSecondaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp),
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { opt ->
-                DropdownMenuItem(
-                    text = { Text(opt) },
-                    onClick = {
-                        expanded = false
-                        onPick(opt)
-                    },
-                )
+            if (options.isNotEmpty()) {
+                MenuSectionHeader("Действия")
+                options.forEach { opt ->
+                    DropdownMenuItem(
+                        text = { Text(opt) },
+                        enabled = enabled,
+                        onClick = {
+                            expanded = false
+                            onPick(opt)
+                        },
+                    )
+                }
+            }
+            if (leads.isNotEmpty()) {
+                MenuSectionHeader("Зацепки")
+                leads.forEach { lead ->
+                    Text(
+                        text = "• $lead",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun MenuSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
 }
 
 private const val SHOP_WORD = "Магазин"
