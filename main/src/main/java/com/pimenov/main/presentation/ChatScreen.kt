@@ -327,22 +327,33 @@ private fun CharacterSheet(player: PlayerSheet, onDismiss: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
             )
 
+            InventorySection("Сумка", player.inventory.filter { it.type !in CATEGORY_TYPES })
+            InventorySection("Оружие", player.inventory.filter { it.type == "weapon" })
+            InventorySection("Броня", player.inventory.filter { it.type == "armor" })
+            InventorySection("Кольца", player.inventory.filter { it.type == "ring" })
+        }
+    }
+}
+
+/** Item types that have their own sheet section; everything else goes to «Сумка». */
+private val CATEGORY_TYPES = setOf("weapon", "armor", "ring")
+
+@Composable
+private fun InventorySection(title: String, items: List<InventoryItem>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (items.isEmpty()) {
             Text(
-                text = "Инвентарь",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                text = "Пусто",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (player.inventory.isEmpty()) {
-                Text(
-                    text = "Пусто.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                player.inventory.forEach { item ->
-                    InventoryRow(item)
-                }
-            }
+        } else {
+            items.forEach { InventoryRow(it) }
         }
     }
 }
@@ -375,6 +386,7 @@ private fun InventoryRow(item: InventoryItem) {
 private fun iconForItemType(type: String): Int = when (type) {
     "weapon" -> R.drawable.ic_item_weapon
     "armor" -> R.drawable.ic_item_armor
+    "ring" -> R.drawable.ic_item_ring
     "consumable" -> R.drawable.ic_item_consumable
     else -> R.drawable.ic_item_generic
 }
