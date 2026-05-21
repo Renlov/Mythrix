@@ -98,7 +98,16 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 QuestBanner(quest = state.quest, modifier = Modifier.weight(1f))
-                CharacterButton(onClick = { showSheet = true })
+                TopIconButton(
+                    icon = R.drawable.ic_shop,
+                    contentDescription = "Лавка",
+                    onClick = { vm.openShop() },
+                )
+                TopIconButton(
+                    icon = R.drawable.ic_avatar,
+                    contentDescription = "Персонаж",
+                    onClick = { showSheet = true },
+                )
             }
             LazyColumn(
                 state = listState,
@@ -237,20 +246,20 @@ private fun QuestBanner(quest: QuestObjective, modifier: Modifier = Modifier) {
     }
 }
 
-/** Top-right avatar icon; tap to open the full character sheet. */
+/** Top-bar pill icon button (same height and color across the bar). */
 @Composable
-private fun CharacterButton(onClick: () -> Unit) {
+private fun TopIconButton(icon: Int, contentDescription: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .padding(horizontal = 8.dp)
+            .padding(end = 8.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.secondaryContainer)
             .clickable { onClick() }
             .padding(8.dp),
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_avatar),
-            contentDescription = "Персонаж",
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
             modifier = Modifier.size(24.dp),
         )

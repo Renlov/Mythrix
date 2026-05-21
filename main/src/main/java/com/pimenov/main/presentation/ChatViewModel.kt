@@ -50,6 +50,9 @@ class ChatViewModel(
     private var nextId = 0L
     private var streamJob: Job? = null
 
+    /** Set when the current turn's input asked to trade; opens the shop once the DM reply finishes. */
+    private var pendingShop = false
+
     init {
         val wares = catalog.waresOf(MERCHANT_ID).map {
             Ware(id = it.id, name = it.name, price = it.price, type = it.type)
@@ -88,16 +91,17 @@ class ChatViewModel(
         _state.update {
             it.copy(messages = it.messages + kickoff + dmMsg, isSending = true)
         }
-        streamAssistant(prompt = opening, history = emptyList(), targetId = dmMsg.id)
+        streamAssistant(prompt = opening, history = emptyList(), targetId = dmMsg.id, playerTurn = false)
     }
 
     fun send(userText: String) {
         val trimmed = userText.trim()
         if (trimmed.isEmpty() || _state.value.isSending) return
 
-        // Trade phrases pop the shop menu locally; the message still goes to
-        // the DM so the merchant reacts in narrative.
-        if (looksLikeTrade(trimmed)) openShop()
+        // Trade phrases queue the shop menu — it opens only after the DM's
+        // reply has fully streamed (see streamAssistant). The message still
+        // goes to the DM so the merchant reacts in narrative.
+        pendingShop = looksLikeTrade(trimmed)
 
         val userMsg = ChatMessage(nextId++, LlmMessage.Role.USER, trimmed)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
@@ -116,10 +120,15 @@ class ChatViewModel(
             .dropLast(2)
             .map { LlmMessage(it.role, it.text) }
 
-        streamAssistant(prompt = trimmed, history = history, targetId = dmMsg.id)
+        streamAssistant(prompt = trimmed, history = history, targetId = dmMsg.id, playerTurn = true)
     }
 
-    private fun streamAssistant(prompt: String, history: List<LlmMessage>, targetId: Long) {
+    private fun streamAssistant(
+        prompt: String,
+        history: List<LlmMessage>,
+        targetId: Long,
+        playerTurn: Boolean,
+    ) {
         streamJob = viewModelScope.launch {
             val buffer = StringBuilder()
             runCatching {
@@ -139,6 +148,7 @@ class ChatViewModel(
             // [OPTIONS] and attach to the message.
             val raw = buffer.toString()
             EventParser.parse(raw)?.let { game.apply(it) }
+            if (playerTurn) maybeAdvanceFindAina(prompt, cleanForDisplay(raw))
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
@@ -148,7 +158,27 @@ class ChatViewModel(
                     },
                 )
             }
+            // Open the shop only now that the DM's reply is fully written.
+            if (pendingShop) {
+                pendingShop = false
+                openShop()
+            }
         }
+    }
+
+    /**
+     * Safety net for the "узнать, куда ушла Айна" objective: if the player
+     * asked about the sister and the DM's narrative reveals a direction, mark
+     * the quest stage advanced even when the DM forgot the `quest_advance`
+     * intent. Vague answers (no direction) don't trigger it.
+     */
+    private fun maybeAdvanceFindAina(playerText: String, narrative: String) {
+        val asked = playerText.lowercase().let { it.contains("айн") || it.contains("сестр") }
+        if (!asked) return
+        val revealed = narrative.lowercase().let { n ->
+            DIRECTION_MARKERS.any { n.contains(it) }
+        }
+        if (revealed) game.advanceQuest("quest_find_aina", 1)
     }
 
     fun clearError() {
@@ -162,6 +192,11 @@ class ChatViewModel(
         private val TRADE_MARKERS = listOf(
             "куп", "торг", "прода", "на продажу", "товар", "цена", "цены",
             "сколько стоит", "что у тебя есть", "что есть", "лавк",
+        )
+
+        /** Words in the DM narrative that signal Aina's direction was revealed. */
+        private val DIRECTION_MARKERS = listOf(
+            "север", "тракт", "на север", "ушла", "дорог", "отрог",
         )
 
         /** Heuristic: does the player's line express intent to trade/buy? */

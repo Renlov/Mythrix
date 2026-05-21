@@ -54,6 +54,22 @@ class GameStateRepository(
      * applier path; records the buy in the journal so the DM stays in the loop.
      * Returns true when the item was actually bought (enough gold, not owned).
      */
+    /**
+     * Deterministic quest advance — a safety net for when the DM forgets to
+     * emit `quest_advance`. No-op if the quest is already at/past [stage].
+     */
+    fun advanceQuest(questId: String, stage: Int) {
+        val before = _state.value
+        val events = EventsBlock(
+            intents = listOf(Intent(type = "quest_advance", questId = questId, newStage = stage)),
+        )
+        val after = EventApplier.apply(before, events, catalog)
+        if (after != before) {
+            _state.value = after
+            persist()
+        }
+    }
+
     fun buy(itemId: String): Boolean {
         val before = _state.value
         val events = EventsBlock(
