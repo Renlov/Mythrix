@@ -67,6 +67,15 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     if (showSheet) {
         CharacterSheet(player = state.player, onDismiss = { showSheet = false })
     }
+    if (state.showShop) {
+        ShopSheet(
+            wares = state.wares,
+            ownedIds = state.ownedItemIds,
+            gold = state.player.gold,
+            onBuy = { vm.buy(it) },
+            onDismiss = { vm.dismissShop() },
+        )
+    }
 
     LaunchedEffect(visible.size, visible.lastOrNull()?.text?.length) {
         if (visible.isNotEmpty()) {
@@ -210,18 +219,20 @@ private fun QuestBanner(quest: QuestObjective, modifier: Modifier = Modifier) {
             .background(MaterialTheme.colorScheme.tertiaryContainer)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = "Цель · ${quest.title}",
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                text = quest.hint,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            quest.steps.forEach { step ->
+                Text(
+                    text = "${if (step.done) "✓" else "○"} ${step.label}",
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
@@ -360,6 +371,90 @@ private fun iconForItemType(type: String): Int = when (type) {
     "armor" -> R.drawable.ic_item_armor
     "consumable" -> R.drawable.ic_item_consumable
     else -> R.drawable.ic_item_generic
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShopSheet(
+    wares: List<Ware>,
+    ownedIds: Set<String>,
+    gold: Int,
+    onBuy: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Товары трактирщика",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Золото · $gold",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            wares.forEach { ware ->
+                WareRow(
+                    ware = ware,
+                    owned = ware.id in ownedIds,
+                    canAfford = gold >= ware.price,
+                    onBuy = { onBuy(ware.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WareRow(ware: Ware, owned: Boolean, canAfford: Boolean, onBuy: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(iconForItemType(ware.type)),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = ware.name, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "${ware.price} зол.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        when {
+            owned -> Text(
+                text = "Куплено",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> Button(onClick = onBuy, enabled = canAfford) {
+                Text(if (canAfford) "Купить" else "Мало золота")
+            }
+        }
+    }
 }
 
 @Composable

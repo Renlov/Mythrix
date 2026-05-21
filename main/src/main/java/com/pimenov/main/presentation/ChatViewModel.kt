@@ -31,6 +31,9 @@ data class ChatState(
     val error: String? = null,
     val quest: QuestObjective = TavernPilotQuest.initial,
     val player: PlayerSheet = PlayerSheet(),
+    val wares: List<Ware> = emptyList(),
+    val ownedItemIds: Set<String> = emptySet(),
+    val showShop: Boolean = false,
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
@@ -48,18 +51,36 @@ class ChatViewModel(
     private var streamJob: Job? = null
 
     init {
+        val wares = catalog.waresOf(MERCHANT_ID).map {
+            Ware(id = it.id, name = it.name, price = it.price, type = it.type)
+        }
+        _state.update { it.copy(wares = wares) }
+
         viewModelScope.launch {
             game.state.collect { ps ->
+                val hasWeapon = ps.inventoryIds.any { id ->
+                    id != STARTER_WEAPON && catalog.byId(id)?.type == "weapon"
+                }
                 _state.update {
                     it.copy(
                         player = ps.toSheet(catalog),
-                        quest = TavernPilotQuest.objectiveFor(ps.questStages),
+                        quest = TavernPilotQuest.objectiveFor(ps.questStages, hasWeapon),
+                        ownedItemIds = ps.inventoryIds.toSet(),
                     )
                 }
             }
         }
         startSession(OPENING_ACTION)
     }
+
+    /** Deterministic purchase from the shop menu — no LLM round-trip. */
+    fun buy(itemId: String) {
+        game.buy(itemId)
+    }
+
+    fun openShop() = _state.update { it.copy(showShop = true) }
+
+    fun dismissShop() = _state.update { it.copy(showShop = false) }
 
     private fun startSession(opening: String) {
         val kickoff = ChatMessage(nextId++, LlmMessage.Role.USER, opening, hidden = true)
@@ -73,6 +94,10 @@ class ChatViewModel(
     fun send(userText: String) {
         val trimmed = userText.trim()
         if (trimmed.isEmpty() || _state.value.isSending) return
+
+        // Trade phrases pop the shop menu locally; the message still goes to
+        // the DM so the merchant reacts in narrative.
+        if (looksLikeTrade(trimmed)) openShop()
 
         val userMsg = ChatMessage(nextId++, LlmMessage.Role.USER, trimmed)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
@@ -131,6 +156,20 @@ class ChatViewModel(
     }
 
     companion object {
+        private const val MERCHANT_ID = "npc_innkeeper"
+        private const val STARTER_WEAPON = "item_traveler_dagger"
+
+        private val TRADE_MARKERS = listOf(
+            "куп", "торг", "прода", "на продажу", "товар", "цена", "цены",
+            "сколько стоит", "что у тебя есть", "что есть", "лавк",
+        )
+
+        /** Heuristic: does the player's line express intent to trade/buy? */
+        private fun looksLikeTrade(text: String): Boolean {
+            val low = text.lowercase()
+            return TRADE_MARKERS.any { low.contains(it) }
+        }
+
         private const val OPENING_ACTION =
             "Я ищу свою младшую сестру Айну — полгода назад она ушла по этой дороге. " +
                 "Захожу в таверну на исходе сил, надеюсь расспросить и переночевать. " +

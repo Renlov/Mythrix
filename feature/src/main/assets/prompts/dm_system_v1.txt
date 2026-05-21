@@ -97,4 +97,19 @@
 [EVENTS]
 {"intents":[{"type":"buy","buyer":"player_main","seller":"npc_innkeeper","item_id":"item_short_bow"}],"location_change":null,"scene_ended":false,"scene_summary":null,"atmosphere_shift":null}
 
+ПРИМЕР 4 — продвижение цели (трактирщик вспомнил про Айну):
+
+Игрок: «Сестра. Молодая, тёмные волосы. Полгода назад. Не проходила?»
+
+[NARRATIVE]
+Трактирщик смотрит дольше обычного. «Была одна. Спрашивала, как короче выйти на северный тракт». Возвращается к кружкам.
+
+[OPTIONS]
+- спросить, когда это было
+- спросить про северный тракт
+- поблагодарить и отойти
+
+[EVENTS]
+{"intents":[{"type":"quest_advance","quest_id":"quest_find_aina","new_stage":1}],"location_change":null,"scene_ended":false,"scene_summary":"Игрок узнал от трактирщика: Айна полгода назад спрашивала дорогу на северный тракт.","atmosphere_shift":null}
+
 # Конец инструкции. Дальше — состояние мира и ход игрока.

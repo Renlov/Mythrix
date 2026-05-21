@@ -1,5 +1,6 @@
 package com.pimenov.feature.game
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -13,4 +14,5 @@ data class ItemDef(
     val type: String = "",
     val price: Int = 0,
     val description: String = "",
+    @SerialName("owner_id") val ownerId: String? = null,
 )

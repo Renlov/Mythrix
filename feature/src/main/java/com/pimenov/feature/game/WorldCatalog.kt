@@ -15,6 +15,10 @@ class WorldCatalog private constructor(private val items: Map<String, ItemDef>) 
 
     fun name(id: String): String = items[id]?.name ?: id
 
+    /** Items a given NPC sells (its `owner_id`), cheapest first. */
+    fun waresOf(ownerId: String): List<ItemDef> =
+        items.values.filter { it.ownerId == ownerId }.sortedBy { it.price }
+
     companion object {
         private const val ITEMS_PATH = "world/tavern/items.json"
 

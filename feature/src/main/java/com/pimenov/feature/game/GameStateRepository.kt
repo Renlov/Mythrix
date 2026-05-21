@@ -49,6 +49,24 @@ class GameStateRepository(
         persist()
     }
 
+    /**
+     * Deterministic purchase, bypassing the LLM. Reuses the same validated
+     * applier path; records the buy in the journal so the DM stays in the loop.
+     * Returns true when the item was actually bought (enough gold, not owned).
+     */
+    fun buy(itemId: String): Boolean {
+        val before = _state.value
+        val events = EventsBlock(
+            intents = listOf(Intent(type = "buy", buyer = "player_main", itemId = itemId)),
+        )
+        val after = EventApplier.apply(before, events, catalog)
+        if (after == before) return false
+        _state.value = after
+        catalog.byId(itemId)?.let { _journal = appendJournal(_journal, "Куплено у трактирщика: ${it.name}.") }
+        persist()
+        return true
+    }
+
     private fun appendJournal(current: String, entry: String): String {
         val combined = if (current.isBlank()) entry else "$current $entry"
         // Cap so the prompt stays small; keep the most recent context.

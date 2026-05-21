@@ -9,6 +9,14 @@ data class InventoryItem(
     val type: String,
 )
 
+/** A merchant's item offered in the shop menu. */
+data class Ware(
+    val id: String,
+    val name: String,
+    val price: Int,
+    val type: String,
+)
+
 /** UI-facing snapshot of the player: numbers ready to show, items with icons. */
 data class PlayerSheet(
     val name: String = "—",
