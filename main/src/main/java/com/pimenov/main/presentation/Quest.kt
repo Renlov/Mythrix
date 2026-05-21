@@ -24,15 +24,21 @@ object TavernPilotQuest {
     fun objectiveFor(questStages: Map<String, Int>, hasWeapon: Boolean): QuestObjective {
         val foundDirection = (questStages[MAIN_QUEST] ?: 0) >= 1
         val dragonStage = questStages[DRAGON_QUEST] ?: 0
-        return QuestObjective(
-            title = "Найти Айну, собраться в путь",
-            steps = listOf(
+        // Goals come in pairs; only the current pair is shown so the banner
+        // stays at most two lines on a small screen. The next pair replaces
+        // the previous one once both its goals are done.
+        val groups = listOf(
+            listOf(
                 QuestStep("Узнать, куда ушла Айна", foundDirection),
                 QuestStep("Купить оружие у трактирщика", hasWeapon),
+            ),
+            listOf(
                 QuestStep("Узнать, что ждёт на севере", dragonStage >= 1),
                 QuestStep("Решить, идти ли с воинами на рассвете", dragonStage >= 2),
             ),
         )
+        val active = groups.firstOrNull { group -> group.any { !it.done } } ?: groups.last()
+        return QuestObjective(title = "Найти Айну, собраться в путь", steps = active)
     }
 
     /**
