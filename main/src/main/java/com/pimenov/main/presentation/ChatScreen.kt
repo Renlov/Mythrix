@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,12 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,11 +105,6 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
             ) {
                 QuestBanner(quest = state.quest, modifier = Modifier.weight(1f))
                 TopIconButton(
-                    icon = R.drawable.ic_shop,
-                    contentDescription = "Лавка",
-                    onClick = { vm.openShop() },
-                )
-                TopIconButton(
                     icon = R.drawable.ic_avatar,
                     contentDescription = "Персонаж",
                     onClick = { showSheet = true },
@@ -120,7 +121,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 items(visible, key = { it.id }) { msg ->
                     MessageBubble(
                         msg = msg,
-                        onOptionClick = { opt -> vm.send(opt) },
+                        onShopClick = { vm.openShop() },
                     )
                 }
             }
@@ -142,6 +143,11 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                ActionPicker(
+                    options = state.currentOptions,
+                    enabled = !state.isSending,
+                    onPick = { vm.send(it) },
+                )
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
@@ -174,9 +180,8 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
     }
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun MessageBubble(msg: ChatMessage, onOptionClick: (String) -> Unit) {
+private fun MessageBubble(msg: ChatMessage, onShopClick: () -> Unit) {
     val isUser = msg.role == LlmMessage.Role.USER
     val bg = if (isUser) MaterialTheme.colorScheme.primaryContainer
     else MaterialTheme.colorScheme.surfaceVariant
@@ -184,6 +189,7 @@ private fun MessageBubble(msg: ChatMessage, onOptionClick: (String) -> Unit) {
     else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val widthFraction = if (isUser) 0.80f else 0.95f
+    val linkColor = MaterialTheme.colorScheme.primary
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -197,24 +203,14 @@ private fun MessageBubble(msg: ChatMessage, onOptionClick: (String) -> Unit) {
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(
-                text = if (msg.text.isEmpty() && msg.isStreaming) AnnotatedString("…")
-                else withBoldQuotes(msg.text),
+                text = when {
+                    msg.text.isEmpty() && msg.isStreaming -> AnnotatedString("…")
+                    isUser -> withBoldQuotes(msg.text)
+                    else -> dmText(msg.text, linkColor, onShopClick)
+                },
                 color = fg,
                 style = MaterialTheme.typography.bodyMedium,
             )
-        }
-
-        if (msg.options.isNotEmpty() && !msg.isStreaming) {
-            Spacer(Modifier.height(4.dp))
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(widthFraction),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                msg.options.forEach { opt ->
-                    OptionChip(text = opt, onClick = { onOptionClick(opt) })
-                }
-            }
         }
     }
 }
@@ -466,29 +462,83 @@ private fun WareRow(ware: Ware, owned: Boolean, canAfford: Boolean, onBuy: () ->
     }
 }
 
+/** Icon left of the input that opens a menu of the DM's suggested actions. */
 @Composable
-private fun OptionChip(text: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(
-            text = text,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            style = MaterialTheme.typography.bodySmall,
-        )
+private fun ActionPicker(options: List<String>, enabled: Boolean, onPick: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val active = enabled && options.isNotEmpty()
+    Box {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    if (active) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                )
+                .clickable(enabled = active) { expanded = true }
+                .padding(8.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_actions),
+                contentDescription = "Действия",
+                tint = if (active) MaterialTheme.colorScheme.onSecondaryContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { opt ->
+                DropdownMenuItem(
+                    text = { Text(opt) },
+                    onClick = {
+                        expanded = false
+                        onPick(opt)
+                    },
+                )
+            }
+        }
     }
 }
 
+private const val SHOP_WORD = "Магазин"
+
 /**
- * Renders quoted speech (between `«…»` or straight `"…"`) in bold.
- * Empty or unmatched quotes fall through as plain text.
+ * DM text: quoted speech in bold, plus the word «Магазин» rendered as an
+ * underlined link that opens the shop menu.
  */
-private fun withBoldQuotes(text: String): AnnotatedString = buildAnnotatedString {
-    if (text.isEmpty()) return@buildAnnotatedString
+private fun dmText(text: String, linkColor: Color, onShop: () -> Unit): AnnotatedString =
+    buildAnnotatedString {
+        var idx = 0
+        while (true) {
+            val found = text.indexOf(SHOP_WORD, idx)
+            if (found < 0) {
+                appendBoldQuotes(text.substring(idx))
+                break
+            }
+            appendBoldQuotes(text.substring(idx, found))
+            withLink(
+                LinkAnnotation.Clickable(
+                    tag = "SHOP",
+                    styles = TextLinkStyles(
+                        style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                    ),
+                ) { onShop() },
+            ) {
+                append(SHOP_WORD)
+            }
+            idx = found + SHOP_WORD.length
+        }
+    }
+
+private fun withBoldQuotes(text: String): AnnotatedString =
+    buildAnnotatedString { appendBoldQuotes(text) }
+
+/**
+ * Appends [text] to the builder, rendering quoted speech (between `«…»` or
+ * straight `"…"`) in bold. Unmatched quotes fall through as plain text.
+ */
+private fun AnnotatedString.Builder.appendBoldQuotes(text: String) {
+    if (text.isEmpty()) return
     val bold = SpanStyle(fontWeight = FontWeight.Bold)
     var i = 0
     while (i < text.length) {
@@ -502,9 +552,8 @@ private fun withBoldQuotes(text: String): AnnotatedString = buildAnnotatedString
         val closeChar = if (ch == '«') '»' else '"'
         val closeIdx = text.indexOf(closeChar, openIdx + 1)
         if (closeIdx < 0) {
-            // Unmatched — append the rest as plain.
             append(text.substring(openIdx))
-            return@buildAnnotatedString
+            return
         }
         withStyle(bold) {
             append(text.substring(openIdx, closeIdx + 1))

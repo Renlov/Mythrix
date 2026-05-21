@@ -21,8 +21,6 @@ data class ChatMessage(
     val isStreaming: Boolean = false,
     /** Hidden from UI but kept in conversation history sent to the model. */
     val hidden: Boolean = false,
-    /** Suggested actions parsed from the DM's [OPTIONS] block. Empty for user. */
-    val options: List<String> = emptyList(),
 )
 
 data class ChatState(
@@ -34,6 +32,8 @@ data class ChatState(
     val wares: List<Ware> = emptyList(),
     val ownedItemIds: Set<String> = emptySet(),
     val showShop: Boolean = false,
+    /** Latest DM-suggested actions, shown in the action picker beside the input. */
+    val currentOptions: List<String> = emptyList(),
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
@@ -49,9 +49,6 @@ class ChatViewModel(
 
     private var nextId = 0L
     private var streamJob: Job? = null
-
-    /** Set when the current turn's input asked to trade; opens the shop once the DM reply finishes. */
-    private var pendingShop = false
 
     init {
         val wares = catalog.waresOf(MERCHANT_ID).map {
@@ -98,21 +95,16 @@ class ChatViewModel(
         val trimmed = userText.trim()
         if (trimmed.isEmpty() || _state.value.isSending) return
 
-        // Trade phrases queue the shop menu — it opens only after the DM's
-        // reply has fully streamed (see streamAssistant). The message still
-        // goes to the DM so the merchant reacts in narrative.
-        pendingShop = looksLikeTrade(trimmed)
-
         val userMsg = ChatMessage(nextId++, LlmMessage.Role.USER, trimmed)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
 
         _state.update {
             it.copy(
-                // Strip prior options once the player has chosen — keeps the
-                // log clean and prevents stale chips from cluttering.
-                messages = it.messages.map { m -> m.copy(options = emptyList()) } + userMsg + dmMsg,
+                messages = it.messages + userMsg + dmMsg,
                 isSending = true,
                 error = null,
+                // Clear stale actions until the next DM reply provides new ones.
+                currentOptions = emptyList(),
             )
         }
 
@@ -153,15 +145,11 @@ class ChatViewModel(
             _state.update { st ->
                 st.copy(
                     isSending = false,
+                    currentOptions = options,
                     messages = st.messages.map { m ->
-                        if (m.id == targetId) m.copy(isStreaming = false, options = options) else m
+                        if (m.id == targetId) m.copy(isStreaming = false) else m
                     },
                 )
-            }
-            // Open the shop only now that the DM's reply is fully written.
-            if (pendingShop) {
-                pendingShop = false
-                openShop()
             }
         }
     }
@@ -189,21 +177,10 @@ class ChatViewModel(
         private const val MERCHANT_ID = "npc_innkeeper"
         private const val STARTER_WEAPON = "item_traveler_dagger"
 
-        private val TRADE_MARKERS = listOf(
-            "куп", "торг", "прода", "на продажу", "товар", "цена", "цены",
-            "сколько стоит", "что у тебя есть", "что есть", "лавк",
-        )
-
         /** Words in the DM narrative that signal Aina's direction was revealed. */
         private val DIRECTION_MARKERS = listOf(
             "север", "тракт", "на север", "ушла", "дорог", "отрог",
         )
-
-        /** Heuristic: does the player's line express intent to trade/buy? */
-        private fun looksLikeTrade(text: String): Boolean {
-            val low = text.lowercase()
-            return TRADE_MARKERS.any { low.contains(it) }
-        }
 
         private const val OPENING_ACTION =
             "Я ищу свою младшую сестру Айну — полгода назад она ушла по этой дороге. " +
