@@ -35,4 +35,11 @@ class CombatEngine(private val dice: DiceRoller = DiceRoller()) {
             killed = after == 0,
         )
     }
+
+    /** Success if `d20 + bonus >= dc`. */
+    fun resolveSkillCheck(bonus: Int, dc: Int): SkillCheckResult {
+        val roll = dice.d20()
+        val total = roll + bonus
+        return SkillCheckResult(success = total >= dc, roll = roll, total = total, dc = dc)
+    }
 }

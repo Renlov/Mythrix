@@ -165,6 +165,16 @@ class GameStateRepository(
         )
     }
 
+    /** Resolves a d20 skill check at the named difficulty (easy/medium/hard). */
+    fun playerSkillCheck(difficulty: String?): SkillCheckResult {
+        val dc = when (difficulty?.lowercase()) {
+            "easy" -> DC_EASY
+            "hard" -> DC_HARD
+            else -> DC_MEDIUM
+        }
+        return combatEngine.resolveSkillCheck(PLAYER_SKILL_BONUS, dc)
+    }
+
     private fun equippedWeaponDamage(player: PlayerState): String {
         val weapon = player.equippedIds.firstNotNullOfOrNull { id ->
             catalog.byId(id)?.takeIf { it.type == "weapon" }
@@ -235,6 +245,10 @@ class GameStateRepository(
         private const val PLAYER_ATTACK_BONUS = 2
         private const val PLAYER_BASE_AC = 10
         private const val UNARMED_DAMAGE = "d2"
+        private const val PLAYER_SKILL_BONUS = 2
+        private const val DC_EASY = 8
+        private const val DC_MEDIUM = 12
+        private const val DC_HARD = 16
     }
 }
 

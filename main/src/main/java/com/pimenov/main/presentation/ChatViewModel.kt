@@ -8,6 +8,7 @@ import com.pimenov.feature.game.CombatRound
 import com.pimenov.feature.game.EventParser
 import com.pimenov.feature.game.EventsBlock
 import com.pimenov.feature.game.GameStateRepository
+import com.pimenov.feature.game.SkillCheckResult
 import com.pimenov.feature.game.WorldCatalog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -155,36 +156,44 @@ class ChatViewModel(
                 maybeAdvanceFindAina(prompt, narrative)
                 maybeAdvanceDragon(prompt, narrative)
             }
-            // Combat resolves only on the player's own turn — never on the
-            // phase-2 outcome turn, so there's no recursion.
-            val combatRound = if (playerTurn) resolveCombatIfAny(events) else null
+            // Dice actions resolve only on the player's own turn — never on
+            // the phase-2 outcome turn, so there's no recursion.
+            val turnResult = if (playerTurn) resolveTurnAction(events) else null
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
-                    // Stay "sending" if a combat outcome turn is about to run.
-                    isSending = combatRound != null,
-                    currentOptions = if (combatRound != null) emptyList() else options,
+                    // Stay "sending" if an outcome turn is about to run.
+                    isSending = turnResult != null,
+                    currentOptions = if (turnResult != null) emptyList() else options,
                     messages = st.messages.map { m ->
                         if (m.id == targetId) m.copy(isStreaming = false) else m
                     },
                 )
             }
-            // Phase 2: narrate the combat outcome AFTER phase-1 text is shown.
-            combatRound?.let { runCombatOutcome(it) }
+            // Phase 2: narrate the dice outcome AFTER phase-1 text is shown.
+            turnResult?.let { runOutcomePhase2(it) }
         }
     }
 
-    /** If the DM aimed an attack at a known enemy, resolve one exchange. */
-    private fun resolveCombatIfAny(events: EventsBlock?): CombatRound? {
-        val target = events?.intents
-            ?.firstOrNull { it.type == "attack" && it.target != null }
-            ?.target ?: return null
-        return game.playerAttack(target)
+    /**
+     * Resolves a dice-driven intent (attack or skill check) and returns the
+     * hidden [TURN RESULT] text for phase 2, or null if there's nothing to roll.
+     */
+    private fun resolveTurnAction(events: EventsBlock?): String? {
+        val intents = events?.intents ?: return null
+        val attack = intents.firstOrNull { it.type == "attack" && it.target != null }
+        if (attack != null) {
+            return attack.target?.let { game.playerAttack(it) }?.let { buildTurnResult(it) }
+        }
+        val skill = intents.firstOrNull { it.type == "skill_check" }
+        if (skill != null) {
+            return buildSkillResult(skill.skill, game.playerSkillCheck(skill.difficulty))
+        }
+        return null
     }
 
     /** Feeds a hidden [TURN RESULT] to the DM and streams the outcome narration. */
-    private fun runCombatOutcome(round: CombatRound) {
-        val resultText = buildTurnResult(round)
+    private fun runOutcomePhase2(resultText: String) {
         val hidden = ChatMessage(nextId++, LlmMessage.Role.USER, resultText, hidden = true)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
         _state.update { it.copy(messages = it.messages + hidden + dmMsg) }
@@ -273,6 +282,19 @@ class ChatViewModel(
                 append("Опиши смерть игрока коротко и без цифр. Это конец.")
             } else {
                 append("Опиши обмен ударами коротко, без цифр. Бой продолжается — предложи действия в [OPTIONS].")
+            }
+        }
+
+        /** Hidden facts of a skill check, fed to the DM for phase-2 narration. */
+        private fun buildSkillResult(skill: String?, result: SkillCheckResult): String = buildString {
+            appendLine("[TURN RESULT]")
+            val label = skill?.takeIf { it.isNotBlank() }?.let { "Проверка ($it)" } ?: "Проверка"
+            if (result.success) {
+                appendLine("$label — успех (бросок ${result.roll}).")
+                append("Опиши коротко, как игроку удалось, без цифр. Заверши живой деталью.")
+            } else {
+                appendLine("$label — провал (бросок ${result.roll}).")
+                append("Опиши неудачу и её осязаемое последствие коротко, без цифр. Дай игроку выбор, что делать дальше, в [OPTIONS].")
             }
         }
 
