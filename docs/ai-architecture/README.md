@@ -18,6 +18,7 @@
 10. [10-dm-style-rules.md](10-dm-style-rules.md) — Стилевые правила DM (обращение, длина, тон)
 11. [11-system-prompt.md](11-system-prompt.md) — Системный промпт DM v1 (структура, версионирование)
 12. [12-local-testing.md](12-local-testing.md) — Локальное тестирование промпта через Ollama
+13. [13-route-to-dragon.md](13-route-to-dragon.md) — Маршрут до дракона (узлы, механики, порядок)
 
 ## Ключевые принципы (TL;DR)
 
