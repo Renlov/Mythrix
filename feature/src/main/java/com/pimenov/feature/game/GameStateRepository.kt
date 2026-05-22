@@ -37,6 +37,9 @@ class GameStateRepository(
 
     private var _journal: String = initial.journal
 
+    private val combatEngine = CombatEngine()
+    private var combat: CombatSession? = null
+
     fun journal(): String = _journal
 
     /** Applies a parsed DM events block: updates state, extends the journal, persists. */
@@ -105,6 +108,75 @@ class GameStateRepository(
         return true
     }
 
+    /**
+     * Resolves one attack exchange against [enemyId]: the player swings with
+     * the equipped weapon, then — if the enemy lives — it strikes back. HP of
+     * both sides and the journal are updated. Returns null if the id is not a
+     * known enemy (e.g. the DM aimed an attack at an NPC).
+     */
+    fun playerAttack(enemyId: String): CombatRound? {
+        val enemy = catalog.enemy(enemyId) ?: return null
+        val session = combat?.takeIf { it.enemyId == enemyId } ?: CombatSession(enemyId, enemy.hp)
+        val player = _state.value
+
+        val playerResult = combatEngine.resolveAttack(
+            attackBonus = PLAYER_ATTACK_BONUS,
+            damageExpr = equippedWeaponDamage(player),
+            targetAc = enemy.ac,
+            targetHp = session.enemyHp,
+        )
+
+        if (playerResult.killed) {
+            combat = null
+            _journal = appendJournal(_journal, "Победа в бою: ${enemy.name} повержен.")
+            persist()
+            return CombatRound(
+                enemyName = enemy.name,
+                playerHit = playerResult.hit,
+                playerRoll = playerResult.attackRoll,
+                playerDamage = playerResult.damage,
+                enemyHpAfter = 0,
+                enemyKilled = true,
+            )
+        }
+
+        val enemyResult = combatEngine.resolveAttack(
+            attackBonus = enemy.attackBonus,
+            damageExpr = enemy.attackDie,
+            targetAc = PLAYER_BASE_AC + equippedArmorBonus(player),
+            targetHp = player.hp,
+        )
+        _state.value = player.copy(hp = enemyResult.targetHpAfter)
+        combat = if (enemyResult.killed) null else session.copy(enemyHp = playerResult.targetHpAfter)
+        if (enemyResult.killed) _journal = appendJournal(_journal, "Смерть в бою с ${enemy.name}.")
+        persist()
+
+        return CombatRound(
+            enemyName = enemy.name,
+            playerHit = playerResult.hit,
+            playerRoll = playerResult.attackRoll,
+            playerDamage = playerResult.damage,
+            enemyHpAfter = playerResult.targetHpAfter,
+            enemyKilled = false,
+            enemyHit = enemyResult.hit,
+            enemyDamage = enemyResult.damage,
+            playerHpAfter = enemyResult.targetHpAfter,
+            playerDead = enemyResult.killed,
+        )
+    }
+
+    private fun equippedWeaponDamage(player: PlayerState): String {
+        val weapon = player.equippedIds.firstNotNullOfOrNull { id ->
+            catalog.byId(id)?.takeIf { it.type == "weapon" }
+        }
+        return weapon?.damageDie ?: UNARMED_DAMAGE
+    }
+
+    private fun equippedArmorBonus(player: PlayerState): Int =
+        player.equippedIds.sumOf { id ->
+            catalog.byId(id)?.takeIf { it.type == "armor" }?.armorBonus ?: 0
+        }
+
     private fun appendJournal(current: String, entry: String): String {
         val combined = if (current.isBlank()) entry else "$current $entry"
         // Cap so the prompt stays small; keep the most recent context.
@@ -160,6 +232,9 @@ class GameStateRepository(
         private const val SAVE_FILE = "save_tavern.json"
         private const val PLAYER_PATH = "world/tavern/player.json"
         private const val JOURNAL_MAX = 1200
+        private const val PLAYER_ATTACK_BONUS = 2
+        private const val PLAYER_BASE_AC = 10
+        private const val UNARMED_DAMAGE = "d2"
     }
 }
 

@@ -51,6 +51,7 @@ object TavernWorldBibleLoader {
         val playerBlock = renderPlayerBlock(context, player)
         val locationBlock = renderLocationBlock(player, catalog)
         val npcs = renderNpcsForLocation(context, player, catalog)
+        val enemies = renderEnemiesForLocation(player, catalog)
         val items = renderItemsBlock(context, player)
         val quests = readAsset(context, "$WORLD_DIR/quests.json")
 
@@ -69,6 +70,9 @@ object TavernWorldBibleLoader {
             appendLine()
             appendLine("[NPCS]")
             appendLine(npcs)
+            appendLine()
+            appendLine("[ВРАГИ]")
+            appendLine(enemies)
             appendLine()
             appendLine("[ITEMS]")
             appendLine(items)
@@ -154,6 +158,21 @@ object TavernWorldBibleLoader {
             },
         )
         return pretty.encodeToString(JsonArray.serializer(), updated)
+    }
+
+    /** Enemies present in the current location and how to fight them. */
+    private fun renderEnemiesForLocation(player: PlayerState, catalog: WorldCatalog): String {
+        val ids = catalog.location(player.locationId)?.enemies.orEmpty()
+        val enemies = ids.mapNotNull { catalog.enemy(it) }
+        if (enemies.isEmpty()) return "Врагов рядом нет."
+        return buildString {
+            enemies.forEach { e -> appendLine("- ${e.name} (${e.id}): ${e.description}") }
+            append(
+                "Если игрок нападает на врага — опиши замах (намерение) и верни в [EVENTS] " +
+                    "{\"type\":\"attack\",\"actor\":\"player_main\",\"target\":\"<id_врага>\",\"weapon\":\"<id_оружия|null>\"}. " +
+                    "НЕ пиши попадание, урон или HP — это посчитает движок и пришлёт [TURN RESULT].",
+            )
+        }
     }
 
     /** Static player.json with the mutable fields overwritten from [player]. */

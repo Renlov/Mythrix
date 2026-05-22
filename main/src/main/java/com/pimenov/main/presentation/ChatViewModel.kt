@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.api.LlmMessage
+import com.pimenov.feature.game.CombatRound
 import com.pimenov.feature.game.EventParser
+import com.pimenov.feature.game.EventsBlock
 import com.pimenov.feature.game.GameStateRepository
 import com.pimenov.feature.game.WorldCatalog
 import kotlinx.coroutines.Job
@@ -146,23 +148,48 @@ class ChatViewModel(
             // After streaming, apply [EVENTS] to game state, then parse
             // [OPTIONS] and attach to the message.
             val raw = buffer.toString()
-            EventParser.parse(raw)?.let { game.apply(it) }
+            val events = EventParser.parse(raw)
+            events?.let { game.apply(it) }
             if (playerTurn) {
                 val narrative = cleanForDisplay(raw)
                 maybeAdvanceFindAina(prompt, narrative)
                 maybeAdvanceDragon(prompt, narrative)
             }
+            // Combat resolves only on the player's own turn — never on the
+            // phase-2 outcome turn, so there's no recursion.
+            val combatRound = if (playerTurn) resolveCombatIfAny(events) else null
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
-                    isSending = false,
-                    currentOptions = options,
+                    // Stay "sending" if a combat outcome turn is about to run.
+                    isSending = combatRound != null,
+                    currentOptions = if (combatRound != null) emptyList() else options,
                     messages = st.messages.map { m ->
                         if (m.id == targetId) m.copy(isStreaming = false) else m
                     },
                 )
             }
+            // Phase 2: narrate the combat outcome AFTER phase-1 text is shown.
+            combatRound?.let { runCombatOutcome(it) }
         }
+    }
+
+    /** If the DM aimed an attack at a known enemy, resolve one exchange. */
+    private fun resolveCombatIfAny(events: EventsBlock?): CombatRound? {
+        val target = events?.intents
+            ?.firstOrNull { it.type == "attack" && it.target != null }
+            ?.target ?: return null
+        return game.playerAttack(target)
+    }
+
+    /** Feeds a hidden [TURN RESULT] to the DM and streams the outcome narration. */
+    private fun runCombatOutcome(round: CombatRound) {
+        val resultText = buildTurnResult(round)
+        val hidden = ChatMessage(nextId++, LlmMessage.Role.USER, resultText, hidden = true)
+        val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
+        _state.update { it.copy(messages = it.messages + hidden + dmMsg) }
+        val history = _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
+        streamAssistant(prompt = resultText, history = history, targetId = dmMsg.id, playerTurn = false)
     }
 
     /**
@@ -221,6 +248,33 @@ class ChatViewModel(
             "присоедин", "возьмите меня", "пойдём вместе", "идти с вами",
             "идём вместе", "с вами на рассвете",
         )
+
+        /** Hidden facts of a combat round, fed to the DM for phase-2 narration. */
+        private fun buildTurnResult(round: CombatRound): String = buildString {
+            appendLine("[TURN RESULT]")
+            if (round.playerHit) {
+                appendLine("Игрок попал по «${round.enemyName}» (бросок ${round.playerRoll}), урон ${round.playerDamage}.")
+            } else {
+                appendLine("Игрок промахнулся по «${round.enemyName}» (бросок ${round.playerRoll}).")
+            }
+            if (round.enemyKilled) {
+                appendLine("«${round.enemyName}» убит.")
+                append("Опиши коротко победу над врагом, без цифр. Заверши сцену живой деталью.")
+                return@buildString
+            }
+            appendLine("«${round.enemyName}» держится.")
+            if (round.enemyHit) {
+                appendLine("«${round.enemyName}» бьёт в ответ, урон ${round.enemyDamage}.")
+            } else {
+                appendLine("«${round.enemyName}» бьёт в ответ и промахивается.")
+            }
+            if (round.playerDead) {
+                appendLine("Игрок погибает.")
+                append("Опиши смерть игрока коротко и без цифр. Это конец.")
+            } else {
+                append("Опиши обмен ударами коротко, без цифр. Бой продолжается — предложи действия в [OPTIONS].")
+            }
+        }
 
         private const val OPENING_ACTION =
             "Я ищу свою младшую сестру Айну — полгода назад она ушла по этой дороге. " +

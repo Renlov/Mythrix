@@ -42,6 +42,7 @@
     "tags": ["outdoor", "forest", "journey"],
     "connections": ["loc_collapsed_mines"],
     "npcs": [],
+    "enemies": ["enemy_forest_wolf"],
     "items": []
   },
   {

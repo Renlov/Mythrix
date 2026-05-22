@@ -13,6 +13,7 @@ data class LocationDef(
     val description: String = "",
     val connections: List<String> = emptyList(),
     val npcs: List<String> = emptyList(),
+    val enemies: List<String> = emptyList(),
     val atmosphere: Atmosphere? = null,
 )
 
