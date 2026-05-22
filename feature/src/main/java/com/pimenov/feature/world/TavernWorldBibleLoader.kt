@@ -51,7 +51,7 @@ object TavernWorldBibleLoader {
         val playerBlock = renderPlayerBlock(context, player)
         val locationBlock = renderLocationBlock(player, catalog)
         val npcs = renderNpcsForLocation(context, player, catalog)
-        val items = readAsset(context, "$WORLD_DIR/items.json")
+        val items = renderItemsBlock(context, player)
         val quests = readAsset(context, "$WORLD_DIR/quests.json")
 
         // Sub-headers deliberately avoid `[PLAYER]` — that token is a stop
@@ -102,15 +102,58 @@ object TavernWorldBibleLoader {
         }
     }
 
-    /** Only NPCs physically present in the current location. */
+    /**
+     * Only NPCs physically present in the current location. Items the player
+     * already owns are stripped from each NPC's inventory so the DM never
+     * treats a sold item as still belonging to the merchant.
+     */
     private fun renderNpcsForLocation(context: Context, player: PlayerState, catalog: WorldCatalog): String {
         val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
         if (present.isEmpty()) return "[]"
+        val owned = player.inventoryIds.toSet()
         val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/npcs.json")).jsonArray
         val filtered = JsonArray(
-            all.filter { it.jsonObject["id"]?.jsonPrimitive?.content in present },
+            all.filter { it.jsonObject["id"]?.jsonPrimitive?.content in present }
+                .map { stripOwnedFromInventory(it.jsonObject, owned) },
         )
         return pretty.encodeToString(JsonArray.serializer(), filtered)
+    }
+
+    private fun stripOwnedFromInventory(npc: JsonObject, owned: Set<String>): JsonObject {
+        val inventory = npc["inventory"]?.jsonArray ?: return npc
+        val kept = inventory.filter { it.jsonPrimitive.content !in owned }
+        if (kept.size == inventory.size) return npc
+        return buildJsonObject {
+            npc.forEach { (key, value) ->
+                if (key == "inventory") put("inventory", JsonArray(kept)) else put(key, value)
+            }
+        }
+    }
+
+    /**
+     * Items as the DM should see them: anything the player holds is re-owned
+     * to `player_main`, so the merchant can't claim or "put away" a sold item.
+     */
+    private fun renderItemsBlock(context: Context, player: PlayerState): String {
+        val owned = player.inventoryIds.toSet()
+        val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/items.json")).jsonArray
+        val updated = JsonArray(
+            all.map { element ->
+                val obj = element.jsonObject
+                val id = obj["id"]?.jsonPrimitive?.content
+                if (id != null && id in owned) {
+                    buildJsonObject {
+                        obj.forEach { (key, value) ->
+                            if (key == "owner_id") put("owner_id", JsonPrimitive("player_main")) else put(key, value)
+                        }
+                        if (!obj.containsKey("owner_id")) put("owner_id", JsonPrimitive("player_main"))
+                    }
+                } else {
+                    obj
+                }
+            },
+        )
+        return pretty.encodeToString(JsonArray.serializer(), updated)
     }
 
     /** Static player.json with the mutable fields overwritten from [player]. */
