@@ -1,4 +1,7 @@
-package com.pimenov.feature.game
+package com.pimenov.feature.game.events
+
+import com.pimenov.feature.game.player.PlayerState
+import com.pimenov.feature.game.world.WorldCatalog
 
 /**
  * Applies DM intents to [PlayerState], returning a new immutable state.

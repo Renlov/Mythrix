@@ -1,4 +1,4 @@
-package com.pimenov.feature.game
+package com.pimenov.feature.game.combat
 
 import kotlin.random.Random
 

@@ -4,12 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.api.LlmMessage
-import com.pimenov.feature.game.CombatRound
-import com.pimenov.feature.game.EventParser
-import com.pimenov.feature.game.EventsBlock
 import com.pimenov.feature.game.GameStateRepository
-import com.pimenov.feature.game.SkillCheckResult
-import com.pimenov.feature.game.WorldCatalog
+import com.pimenov.feature.game.combat.CombatRound
+import com.pimenov.feature.game.combat.SkillCheckResult
+import com.pimenov.feature.game.events.EventParser
+import com.pimenov.feature.game.events.EventsBlock
+import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -1,8 +1,8 @@
 package com.pimenov.feature.world
 
 import android.content.Context
-import com.pimenov.feature.game.PlayerState
-import com.pimenov.feature.game.WorldCatalog
+import com.pimenov.feature.game.player.PlayerState
+import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject

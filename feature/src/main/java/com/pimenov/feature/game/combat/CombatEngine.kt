@@ -1,4 +1,4 @@
-package com.pimenov.feature.game
+package com.pimenov.feature.game.combat
 
 /** Result of a single attack resolution. Pure data, no narrative. */
 data class CombatResult(

@@ -2,7 +2,7 @@ package com.pimenov.feature.di
 
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.game.GameStateRepository
-import com.pimenov.feature.game.WorldCatalog
+import com.pimenov.feature.game.world.WorldCatalog
 import com.pimenov.feature.impl.DeepSeekLlmEngine
 import com.pimenov.feature.world.TavernWorldBibleLoader
 import org.koin.android.ext.koin.androidContext

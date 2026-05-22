@@ -1,4 +1,4 @@
-package com.pimenov.feature.game
+package com.pimenov.feature.game.world
 
 import android.content.Context
 import kotlinx.serialization.json.Json

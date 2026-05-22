@@ -1,7 +1,7 @@
 package com.pimenov.main.presentation
 
-import com.pimenov.feature.game.PlayerState
-import com.pimenov.feature.game.WorldCatalog
+import com.pimenov.feature.game.player.PlayerState
+import com.pimenov.feature.game.world.WorldCatalog
 
 /** An inventory entry ready for the sheet: name, type, combat stats, equip flag. */
 data class InventoryItem(

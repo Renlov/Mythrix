@@ -1,4 +1,4 @@
-package com.pimenov.feature.game
+package com.pimenov.feature.game.combat
 
 /** Transient state of an ongoing fight (not persisted in v1). */
 data class CombatSession(val enemyId: String, val enemyHp: Int, val enemyMaxHp: Int)

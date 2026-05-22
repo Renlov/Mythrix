@@ -1,4 +1,4 @@
-package com.pimenov.feature.game
+package com.pimenov.feature.game.player
 
 import kotlinx.serialization.Serializable
 
