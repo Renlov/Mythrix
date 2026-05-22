@@ -71,7 +71,7 @@ class ChatViewModel(
                 _state.update {
                     it.copy(
                         player = ps.toSheet(catalog),
-                        quest = TavernPilotQuest.objectiveFor(ps.questStages, hasWeapon),
+                        quest = TavernPilotQuest.objectiveFor(ps.questStages, hasWeapon, ps.locationId, ps.outcome),
                         leads = TavernPilotQuest.leadsFor(ps.questStages),
                         ownedItemIds = ps.inventoryIds.toSet(),
                         outcome = ps.outcome,
