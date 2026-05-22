@@ -149,7 +149,9 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                 )
             }
 
-            Row(
+            if (state.outcome != null) {
+                EndingBar(state.outcome!!)
+            } else Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .imePadding()
@@ -191,6 +193,39 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** Bottom-of-screen pilot ending, replacing the input once the game is over. */
+@Composable
+private fun EndingBar(outcome: String) {
+    val victory = outcome == "victory"
+    val container = if (victory) MaterialTheme.colorScheme.primaryContainer
+    else MaterialTheme.colorScheme.errorContainer
+    val onContainer = if (victory) MaterialTheme.colorScheme.onPrimaryContainer
+    else MaterialTheme.colorScheme.onErrorContainer
+    Surface(color = container, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = if (victory) "Победа" else "Гибель",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = onContainer,
+            )
+            Text(
+                text = if (victory) "Дракон повержен. Пилот пройден."
+                else "Дорога окончилась здесь.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = onContainer,
+            )
         }
     }
 }

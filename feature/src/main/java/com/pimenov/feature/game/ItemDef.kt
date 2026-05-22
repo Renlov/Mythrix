@@ -17,4 +17,6 @@ data class ItemDef(
     @SerialName("owner_id") val ownerId: String? = null,
     @SerialName("damage_die") val damageDie: String? = null,
     @SerialName("armor_bonus") val armorBonus: Int? = null,
+    @SerialName("heal_die") val healDie: String? = null,
+    val uses: Int? = null,
 )

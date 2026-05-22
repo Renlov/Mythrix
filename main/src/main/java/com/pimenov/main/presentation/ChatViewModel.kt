@@ -39,6 +39,8 @@ data class ChatState(
     val currentOptions: List<String> = emptyList(),
     /** Read-only leads the player has uncovered, shown in the same menu. */
     val leads: List<String> = emptyList(),
+    /** Pilot ending: "victory" | "death" | null. Non-null shows the end overlay. */
+    val outcome: String? = null,
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
@@ -72,6 +74,7 @@ class ChatViewModel(
                         quest = TavernPilotQuest.objectiveFor(ps.questStages, hasWeapon),
                         leads = TavernPilotQuest.leadsFor(ps.questStages),
                         ownedItemIds = ps.inventoryIds.toSet(),
+                        outcome = ps.outcome,
                     )
                 }
             }
@@ -181,12 +184,13 @@ class ChatViewModel(
      */
     private fun resolveTurnAction(events: EventsBlock?): String? {
         val intents = events?.intents ?: return null
-        val attack = intents.firstOrNull { it.type == "attack" && it.target != null }
-        if (attack != null) {
-            return attack.target?.let { game.playerAttack(it) }?.let { buildTurnResult(it) }
+        intents.firstOrNull { it.type == "attack" && it.target != null }?.let { attack ->
+            return attack.target?.let { game.playerAttack(it) }?.let { buildCombatResult(it) }
         }
-        val skill = intents.firstOrNull { it.type == "skill_check" }
-        if (skill != null) {
+        intents.firstOrNull { it.type == "use_item" }?.let {
+            return game.playerHeal()?.let { round -> buildCombatResult(round) }
+        }
+        intents.firstOrNull { it.type == "skill_check" }?.let { skill ->
             return buildSkillResult(skill.skill, game.playerSkillCheck(skill.difficulty))
         }
         return null
@@ -259,29 +263,44 @@ class ChatViewModel(
         )
 
         /** Hidden facts of a combat round, fed to the DM for phase-2 narration. */
-        private fun buildTurnResult(round: CombatRound): String = buildString {
+        private fun buildCombatResult(round: CombatRound): String = buildString {
             appendLine("[TURN RESULT]")
-            if (round.playerHit) {
-                appendLine("Игрок попал по «${round.enemyName}» (бросок ${round.playerRoll}), урон ${round.playerDamage}.")
+            val enemy = round.enemyName.ifBlank { "враг" }
+            if (round.action == "heal") {
+                if (round.healed > 0) {
+                    appendLine("Игрок пускает в ход лечебные припасы и восстанавливает силы (+${round.healed}).")
+                } else {
+                    appendLine("Игрок тянется к лечебным припасам, но они кончились.")
+                }
+            } else if (round.playerHit) {
+                appendLine("Игрок попал по «$enemy» (бросок ${round.playerRoll}), урон ${round.playerDamage}.")
             } else {
-                appendLine("Игрок промахнулся по «${round.enemyName}» (бросок ${round.playerRoll}).")
+                appendLine("Игрок промахнулся по «$enemy» (бросок ${round.playerRoll}).")
             }
-            if (round.enemyKilled) {
-                appendLine("«${round.enemyName}» убит.")
-                append("Опиши коротко победу над врагом, без цифр. Заверши сцену живой деталью.")
+            if (round.allyDamage > 0) {
+                appendLine("Воины бьются рядом и наносят «$enemy» урон ${round.allyDamage}.")
+            }
+            round.enemyPhase?.let { appendLine("Состояние «$enemy»: $it.") }
+            if (round.victory) {
+                appendLine("«$enemy» повержен. ПОБЕДА — это финал.")
+                append("Опиши гибель дракона и победу коротко, без цифр, с весом. Это конец пилота.")
                 return@buildString
             }
-            appendLine("«${round.enemyName}» держится.")
+            if (round.enemyKilled) {
+                appendLine("«$enemy» убит.")
+                append("Опиши победу над врагом коротко, без цифр. Заверши живой деталью.")
+                return@buildString
+            }
             if (round.enemyHit) {
-                appendLine("«${round.enemyName}» бьёт в ответ, урон ${round.enemyDamage}.")
+                appendLine("«$enemy» бьёт в ответ, урон ${round.enemyDamage}.")
             } else {
-                appendLine("«${round.enemyName}» бьёт в ответ и промахивается.")
+                appendLine("«$enemy» бьёт в ответ и промахивается.")
             }
             if (round.playerDead) {
-                appendLine("Игрок погибает.")
+                appendLine("Игрок погибает. КОНЕЦ.")
                 append("Опиши смерть игрока коротко и без цифр. Это конец.")
             } else {
-                append("Опиши обмен ударами коротко, без цифр. Бой продолжается — предложи действия в [OPTIONS].")
+                append("Опиши обмен коротко, без цифр. Бой продолжается — предложи действия в [OPTIONS].")
             }
         }
 
