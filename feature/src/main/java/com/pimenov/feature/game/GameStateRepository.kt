@@ -9,7 +9,10 @@ import com.pimenov.feature.game.combat.SkillCheckResult
 import com.pimenov.feature.game.events.EventApplier
 import com.pimenov.feature.game.events.EventsBlock
 import com.pimenov.feature.game.events.Intent
+import com.pimenov.feature.game.player.CharacterProfile
 import com.pimenov.feature.game.player.PlayerState
+import com.pimenov.feature.game.world.ClassCatalog
+import com.pimenov.feature.game.world.ClassDef
 import com.pimenov.feature.game.world.Combatant
 import com.pimenov.feature.game.world.ItemDef
 import com.pimenov.feature.game.world.StoryContentSource
@@ -42,6 +45,7 @@ class GameStateRepository(
     private val catalog: WorldCatalog,
     private val source: StoryContentSource,
     private val rules: StoryRules,
+    private val classes: ClassCatalog,
     private val defaultName: String,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -61,6 +65,28 @@ class GameStateRepository(
     private var combat: CombatSession? = null
 
     fun journal(): String = _journal
+
+    /** True when a game is already in progress (a save exists on disk). */
+    fun hasSave(): Boolean = saveFile.exists()
+
+    /**
+     * Starts a fresh game from a character-creation [profile]: seeds the player
+     * from the story's `player.json` base, overrides name/class/avatar, applies
+     * the class's HP and starting items, clears the journal and persists. Used
+     * both for first play and for restart after an ending.
+     */
+    fun startNewGame(profile: CharacterProfile) {
+        _state.value = buildPlayer(profile)
+        _journal = ""
+        combat = null
+        persist()
+    }
+
+    /** Wipes the current game so the next launch starts at character creation. */
+    fun resetGame() {
+        combat = null
+        runCatching { if (saveFile.exists()) saveFile.delete() }
+    }
 
     /** Applies a parsed DM events block: updates state, extends the journal, persists. */
     fun apply(events: EventsBlock) {
@@ -140,7 +166,7 @@ class GameStateRepository(
         val session = sessionFor(enemyId, target)
         val player = _state.value
         val atk = combatEngine.resolveAttack(
-            attackBonus = PLAYER_ATTACK_BONUS,
+            attackBonus = classOf(player)?.attackBonus ?: PLAYER_ATTACK_BONUS,
             damageExpr = equippedWeaponDamage(player),
             targetAc = target.ac,
             targetHp = session.enemyHp,
@@ -243,7 +269,7 @@ class GameStateRepository(
         val enemyAtk = combatEngine.resolveAttack(
             attackBonus = target.attackBonus,
             damageExpr = target.attackDie,
-            targetAc = PLAYER_BASE_AC + equippedArmorBonus(player),
+            targetAc = (classOf(player)?.baseAc ?: PLAYER_BASE_AC) + equippedArmorBonus(player),
             targetHp = player.hp,
         )
         val dead = enemyAtk.killed
@@ -267,8 +293,11 @@ class GameStateRepository(
             "hard" -> DC_HARD
             else -> DC_MEDIUM
         }
-        return combatEngine.resolveSkillCheck(PLAYER_SKILL_BONUS, dc)
+        val bonus = classOf(_state.value)?.skillBonus ?: PLAYER_SKILL_BONUS
+        return combatEngine.resolveSkillCheck(bonus, dc)
     }
+
+    private fun classOf(player: PlayerState): ClassDef? = classes.byId(player.playerClass)
 
     private fun equippedWeaponDamage(player: PlayerState): String {
         val weapon = player.equippedIds.firstNotNullOfOrNull { id ->
@@ -304,29 +333,43 @@ class GameStateRepository(
         }.getOrNull()
     }
 
-    private fun seedFromAssets(): SaveData {
+    private fun seedFromAssets(): SaveData = SaveData(buildPlayer(profile = null), journal = "")
+
+    /**
+     * Builds a fresh [PlayerState] from the story's `player.json` base. When a
+     * [profile] is given, its name/class/avatar override the base and the
+     * class's HP and starting items are applied; otherwise the base file's own
+     * values (and [defaultName]) are used as a placeholder before creation.
+     */
+    private fun buildPlayer(profile: CharacterProfile?): PlayerState {
         val obj = json.parseToJsonElement(source.read("player.json")).jsonObject
-        val name = obj["name"]?.jsonPrimitive?.contentOrNull() ?: defaultName
-        val playerClass = obj["class"]?.jsonPrimitive?.contentOrNull() ?: "wanderer"
+        val baseClass = obj["class"]?.jsonPrimitive?.contentOrNull() ?: "wanderer"
+        val classId = profile?.classId ?: baseClass
+        val cls: ClassDef? = classes.byId(classId)
         val locationId = obj["location_id"]?.jsonPrimitive?.contentOrNull() ?: "loc_tavern_last_rest"
-        val hp = obj["hp"]?.jsonPrimitive?.int ?: 0
-        val maxHp = obj["max_hp"]?.jsonPrimitive?.int ?: hp
+        val baseHp = obj["hp"]?.jsonPrimitive?.int ?: 0
+        val baseMaxHp = obj["max_hp"]?.jsonPrimitive?.int ?: baseHp
         val gold = obj["gold"]?.jsonPrimitive?.int ?: 0
-        val inventory = obj["inventory"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
+        val baseInventory = obj["inventory"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
         val quests = obj["active_quests"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
         val knownNpcs = obj["known_npcs"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty().toSet()
-        val player = PlayerState(
+        val hp = cls?.hp ?: baseMaxHp.takeIf { it > 0 } ?: baseHp
+        val inventory = (baseInventory + (cls?.startingItems ?: emptyList())).distinct()
+        val name = profile?.name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: obj["name"]?.jsonPrimitive?.contentOrNull()
+            ?: defaultName
+        return PlayerState(
             name = name,
-            playerClass = playerClass,
+            playerClass = classId,
+            avatar = profile?.avatar ?: cls?.avatar,
             locationId = locationId,
             hp = hp,
-            maxHp = maxHp,
+            maxHp = hp,
             gold = gold,
             inventoryIds = inventory,
             questStages = quests.associateWith { 0 },
             knownNpcs = knownNpcs,
         )
-        return SaveData(player, journal = "")
     }
 
     @Serializable

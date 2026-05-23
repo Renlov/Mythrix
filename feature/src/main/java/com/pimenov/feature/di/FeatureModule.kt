@@ -3,6 +3,7 @@ package com.pimenov.feature.di
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.game.GameStateRepository
 import com.pimenov.feature.game.world.AssetStoryContentSource
+import com.pimenov.feature.game.world.ClassCatalog
 import com.pimenov.feature.game.world.StoryContentSource
 import com.pimenov.feature.game.world.StoryRules
 import com.pimenov.feature.game.world.WorldCatalog
@@ -22,7 +23,8 @@ fun featureModule() = module {
     single<StoryContentSource> { AssetStoryContentSource(androidContext(), storyId = ACTIVE_STORY_ID) }
     single { WorldCatalog.load(get()) }
     single { StoryRules.load(get()) }
-    single { GameStateRepository(androidContext(), get(), get(), get(), defaultName = "Кейн") }
+    single { ClassCatalog.load(get()) }
+    single { GameStateRepository(androidContext(), get(), get(), get(), get(), defaultName = "Кейн") }
     single<LlmEngine> {
         val game = get<GameStateRepository>()
         val catalog = get<WorldCatalog>()

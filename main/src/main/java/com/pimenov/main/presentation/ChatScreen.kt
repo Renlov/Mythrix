@@ -50,11 +50,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pimenov.feature.api.LlmMessage
-import com.pimenov.main.R
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
+fun ChatScreen(
+    vm: ChatViewModel = koinViewModel(),
+    onRestart: () -> Unit = {},
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var showSheet by remember { mutableStateOf(false) }
@@ -100,7 +102,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
             ) {
                 QuestBanner(quest = state.quest, modifier = Modifier.weight(1f))
                 TopIconButton(
-                    icon = R.drawable.ic_avatar,
+                    icon = avatarDrawable(state.player.avatar),
                     contentDescription = "Персонаж",
                     onClick = { showSheet = true },
                 )
@@ -131,7 +133,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
             }
 
             if (state.outcome != null) {
-                EndingBar(state.outcome!!)
+                EndingBar(state.outcome!!, onRestart = onRestart)
             } else Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -180,7 +182,7 @@ fun ChatScreen(vm: ChatViewModel = koinViewModel()) {
 
 /** Bottom-of-screen pilot ending, replacing the input once the game is over. */
 @Composable
-private fun EndingBar(outcome: String) {
+private fun EndingBar(outcome: String, onRestart: () -> Unit) {
     val victory = outcome == "victory"
     val container = if (victory) MaterialTheme.colorScheme.primaryContainer
     else MaterialTheme.colorScheme.errorContainer
@@ -193,7 +195,7 @@ private fun EndingBar(outcome: String) {
                 .navigationBarsPadding()
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = if (victory) "Победа" else "Гибель",
@@ -207,6 +209,9 @@ private fun EndingBar(outcome: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = onContainer,
             )
+            Button(onClick = onRestart) {
+                Text("Новая игра")
+            }
         }
     }
 }

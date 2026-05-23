@@ -1,0 +1,46 @@
+[
+  {
+    "id": "wanderer",
+    "name": "Странник",
+    "description": "Привычен к дороге. Ни в чём не лучший, но нигде не пропадёт.",
+    "avatar": "avatar_wanderer",
+    "hp": 12,
+    "attack_bonus": 2,
+    "skill_bonus": 3,
+    "base_ac": 10,
+    "starting_items": []
+  },
+  {
+    "id": "warrior",
+    "name": "Воин",
+    "description": "Бил и был бит. Держит удар и бьёт крепче прочих.",
+    "avatar": "avatar_warrior",
+    "hp": 16,
+    "attack_bonus": 3,
+    "skill_bonus": 1,
+    "base_ac": 11,
+    "starting_items": []
+  },
+  {
+    "id": "rogue",
+    "name": "Плут",
+    "description": "Там, где не пройти силой, проходит хитростью.",
+    "avatar": "avatar_rogue",
+    "hp": 11,
+    "attack_bonus": 2,
+    "skill_bonus": 4,
+    "base_ac": 10,
+    "starting_items": []
+  },
+  {
+    "id": "mage",
+    "name": "Маг",
+    "description": "Слаб телом, но удар его точен и зол.",
+    "avatar": "avatar_mage",
+    "hp": 9,
+    "attack_bonus": 4,
+    "skill_bonus": 2,
+    "base_ac": 9,
+    "starting_items": []
+  }
+]

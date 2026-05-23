@@ -11,6 +11,8 @@ import kotlinx.serialization.Serializable
 data class PlayerState(
     val name: String,
     val playerClass: String = "wanderer",
+    /** Chosen avatar id (maps to a drawable in the UI). null = default icon. */
+    val avatar: String? = null,
     val locationId: String = "loc_tavern_last_rest",
     val hp: Int,
     val maxHp: Int,
