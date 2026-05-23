@@ -5,6 +5,7 @@ import com.pimenov.feature.game.player.PlayerState
 import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -18,10 +19,11 @@ import java.io.IOException
  * Loads the pilot Tavern World Bible and the DM system prompt template, then
  * assembles a single system prompt string for the LLM.
  *
- * The world block reflects the player's current location: only that scene and
- * its exits/NPCs are shown, so moving (via the `location_change` event) swaps
- * the [LOCATION] and [NPCS] context. Mutable player fields and the journal are
- * injected from the live [PlayerState].
+ * Relational RAG (см. docs/ai-architecture/02-context-assembler.md): вместо
+ * всей Библии Мира в промпт подаётся только релевантное текущей сцене —
+ * текущая локация и её выходы, присутствующие NPC и враги, предметы в этой
+ * локации / у этих NPC / у игрока, и активные/доступные квесты. Связи берутся
+ * по `id`. Mutable-поля игрока и журнал инжектятся из живого [PlayerState].
  */
 object TavernWorldBibleLoader {
     private const val PROMPT_TEMPLATE = "prompts/dm_system_v1.txt"
@@ -52,8 +54,8 @@ object TavernWorldBibleLoader {
         val locationBlock = renderLocationBlock(player, catalog)
         val npcs = renderNpcsForLocation(context, player, catalog)
         val enemies = renderEnemiesForLocation(player, catalog)
-        val items = renderItemsBlock(context, player)
-        val quests = readAsset(context, "$WORLD_DIR/quests.json")
+        val items = renderItemsBlock(context, player, catalog)
+        val quests = renderQuestsBlock(context, player, catalog)
 
         // Sub-headers deliberately avoid `[PLAYER]` — that token is a stop
         // marker for hallucinated next turns (see PromptBuilder.STOP_MARKERS).
@@ -135,29 +137,65 @@ object TavernWorldBibleLoader {
     }
 
     /**
-     * Items as the DM should see them: anything the player holds is re-owned
-     * to `player_main`, so the merchant can't claim or "put away" a sold item.
+     * Relational selection of items relevant to the scene: held by the player,
+     * lying in the current location, or owned by an NPC present here. Items the
+     * player holds are re-owned to `player_main` so the merchant can't claim a
+     * sold item. Items tied to other places/NPCs are left out of the prompt.
      */
-    private fun renderItemsBlock(context: Context, player: PlayerState): String {
+    private fun renderItemsBlock(context: Context, player: PlayerState, catalog: WorldCatalog): String {
         val owned = player.inventoryIds.toSet()
+        val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
         val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/items.json")).jsonArray
-        val updated = JsonArray(
-            all.map { element ->
-                val obj = element.jsonObject
-                val id = obj["id"]?.jsonPrimitive?.content
-                if (id != null && id in owned) {
-                    buildJsonObject {
-                        obj.forEach { (key, value) ->
-                            if (key == "owner_id") put("owner_id", JsonPrimitive("player_main")) else put(key, value)
-                        }
-                        if (!obj.containsKey("owner_id")) put("owner_id", JsonPrimitive("player_main"))
-                    }
-                } else {
-                    obj
-                }
-            },
-        )
-        return pretty.encodeToString(JsonArray.serializer(), updated)
+        val relevant = all.filter { element ->
+            val obj = element.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.content
+            val owner = obj.stringOrNull("owner_id")
+            val itemLocation = obj.stringOrNull("location_id")
+            (id != null && id in owned) ||
+                owner == "player_main" ||
+                (owner != null && owner in present) ||
+                itemLocation == player.locationId
+        }.map { element ->
+            val obj = element.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.content
+            if (id != null && id in owned) reown(obj) else obj
+        }
+        return pretty.encodeToString(JsonArray.serializer(), JsonArray(relevant))
+    }
+
+    private fun reown(obj: JsonObject): JsonObject = buildJsonObject {
+        obj.forEach { (key, value) ->
+            if (key == "owner_id") put("owner_id", JsonPrimitive("player_main")) else put(key, value)
+        }
+        if (!obj.containsKey("owner_id")) put("owner_id", JsonPrimitive("player_main"))
+    }
+
+    /**
+     * Relational selection of quests: those still `active`/`available`, or tied
+     * to the current location or a present NPC. Resolved/irrelevant quests are
+     * left out of the prompt.
+     */
+    private fun renderQuestsBlock(context: Context, player: PlayerState, catalog: WorldCatalog): String {
+        val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
+        val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/quests.json")).jsonArray
+        val relevant = all.filter { element ->
+            val obj = element.jsonObject
+            val status = obj["status"]?.jsonPrimitive?.content
+            val relLocations = obj["related_locations"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
+            val relNpcs = obj["related_npcs"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
+            status == "active" || status == "available" ||
+                player.locationId in relLocations ||
+                relNpcs.any { it in present }
+        }
+        return pretty.encodeToString(JsonArray.serializer(), JsonArray(relevant))
+    }
+
+    /** Reads a string field, treating JSON `null` and non-string values as null. */
+    private fun JsonObject.stringOrNull(key: String): String? {
+        val element = this[key] ?: return null
+        if (element is JsonNull) return null
+        val primitive = element as? JsonPrimitive ?: return null
+        return if (primitive.isString) primitive.content else null
     }
 
     /** Enemies present in the current location and how to fight them. */

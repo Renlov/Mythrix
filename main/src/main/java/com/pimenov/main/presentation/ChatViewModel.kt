@@ -136,23 +136,14 @@ class ChatViewModel(
         playerTurn: Boolean,
     ) {
         streamJob = viewModelScope.launch {
-            val buffer = StringBuilder()
-            runCatching {
-                engine.generate(prompt, history).collect { delta ->
-                    buffer.append(delta)
-                    val display = cleanForDisplay(buffer.toString())
-                    _state.update { st ->
-                        st.copy(messages = st.messages.map { m ->
-                            if (m.id == targetId) m.copy(text = display) else m
-                        })
-                    }
-                }
-            }.onFailure { e ->
-                _state.update { it.copy(error = e.message ?: "Ошибка запроса") }
+            var raw = streamOnce(prompt, history, targetId)
+            // Validation + one retry: if the [EVENTS] block didn't parse,
+            // re-ask once with a format reminder. Cheap safety net.
+            if (EventParser.parse(raw) == null) {
+                raw = streamOnce(prompt + RETRY_HINT, history, targetId)
             }
             // After streaming, apply [EVENTS] to game state, then parse
             // [OPTIONS] and attach to the message.
-            val raw = buffer.toString()
             val events = EventParser.parse(raw)
             events?.let { game.apply(it) }
             if (playerTurn) {
@@ -177,6 +168,25 @@ class ChatViewModel(
             // Phase 2: narrate the dice outcome AFTER phase-1 text is shown.
             turnResult?.let { runOutcomePhase2(it) }
         }
+    }
+
+    /** Streams one DM reply into [targetId], returning the raw text (with tags). */
+    private suspend fun streamOnce(prompt: String, history: List<LlmMessage>, targetId: Long): String {
+        val buffer = StringBuilder()
+        runCatching {
+            engine.generate(prompt, history).collect { delta ->
+                buffer.append(delta)
+                val display = cleanForDisplay(buffer.toString())
+                _state.update { st ->
+                    st.copy(messages = st.messages.map { m ->
+                        if (m.id == targetId) m.copy(text = display) else m
+                    })
+                }
+            }
+        }.onFailure { e ->
+            _state.update { it.copy(error = e.message ?: "Ошибка запроса") }
+        }
+        return buffer.toString()
     }
 
     /**
@@ -316,6 +326,11 @@ class ChatViewModel(
                 append("Опиши неудачу и её осязаемое последствие коротко, без цифр. Дай игроку выбор, что делать дальше, в [OPTIONS].")
             }
         }
+
+        /** Appended on a format-retry to nudge the model back to the schema. */
+        private const val RETRY_HINT =
+            "\n\n(Система: твой прошлый ответ был без валидного блока [EVENTS]. " +
+                "Ответь строго по формату: [NARRATIVE], затем [OPTIONS], затем [EVENTS] с валидным JSON.)"
 
         private const val OPENING_ACTION =
             "Я ищу свою младшую сестру Айну — полгода назад она ушла по этой дороге. " +
