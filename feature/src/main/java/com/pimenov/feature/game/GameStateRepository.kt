@@ -120,25 +120,45 @@ class GameStateRepository(
     }
 
     /**
-     * Toggles whether an owned item is equipped. One item per type slot —
-     * equipping a weapon unequips any other weapon, and so on. No-op for
-     * items not held.
+     * Toggles whether an owned item is equipped. Hands are limited:
+     * a two-handed weapon (bow, two-handed axe/sword) fills both hands, so it
+     * unequips any other weapon AND any shield; a one-handed weapon only
+     * unequips other weapons but keeps a shield; a shield unequips two-handed
+     * weapons and other shields but coexists with a one-handed weapon. Other
+     * items still follow one-per-type slotting. No-op for items not held.
      */
     fun toggleEquip(itemId: String) {
         val cur = _state.value
         if (itemId !in cur.inventoryIds) return
+        val def = catalog.byId(itemId)
         val equipped = cur.equippedIds.toMutableSet()
         if (itemId in equipped) {
             equipped.remove(itemId)
+        } else if (def != null) {
+            equipped.removeAll { other -> conflictsWith(def, other) }
+            equipped.add(itemId)
         } else {
-            val type = catalog.byId(itemId)?.type
-            if (type != null) {
-                equipped.removeAll { other -> catalog.byId(other)?.type == type }
-            }
             equipped.add(itemId)
         }
         _state.value = cur.copy(equippedIds = equipped)
         persist()
+    }
+
+    /** Whether equipping [incoming] forces the already-equipped [otherId] off. */
+    private fun conflictsWith(incoming: ItemDef, otherId: String): Boolean {
+        val other = catalog.byId(otherId) ?: return false
+        val incomingWeapon = incoming.type == "weapon"
+        val otherWeapon = other.type == "weapon"
+        return when {
+            // Two-handed weapon needs both hands: clears weapons and shields.
+            incomingWeapon && incoming.twoHanded -> otherWeapon || other.isShield
+            // One-handed weapon: only one weapon at a time; shield stays.
+            incomingWeapon -> otherWeapon
+            // Shield: drops two-handed weapons and other shields; one-handed stays.
+            incoming.isShield -> other.isShield || (otherWeapon && other.twoHanded)
+            // Everything else: one item per type slot.
+            else -> other.type == incoming.type
+        }
     }
 
     fun buy(itemId: String): Boolean {

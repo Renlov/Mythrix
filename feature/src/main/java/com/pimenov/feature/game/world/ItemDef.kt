@@ -12,6 +12,7 @@ data class ItemDef(
     val id: String,
     val name: String,
     val type: String = "",
+    val subtype: String? = null,
     val price: Int = 0,
     val description: String = "",
     @SerialName("owner_id") val ownerId: String? = null,
@@ -19,4 +20,9 @@ data class ItemDef(
     @SerialName("armor_bonus") val armorBonus: Int? = null,
     @SerialName("heal_die") val healDie: String? = null,
     val uses: Int? = null,
-)
+    /** Two-handed weapons (bow, axe, sword) occupy both hands — no shield alongside. */
+    @SerialName("two_handed") val twoHanded: Boolean = false,
+) {
+    /** A shield is worn in the off-hand and coexists only with one-handed weapons. */
+    val isShield: Boolean get() = type == "armor" && subtype == "shield"
+}
