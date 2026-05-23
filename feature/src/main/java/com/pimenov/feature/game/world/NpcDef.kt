@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * An NPC from `world/tavern/npcs.json`. Only the fields the engine acts on are
+ * An NPC from a story's `npcs.json`. Only the fields the engine acts on are
  * typed (id, role, location, wares); narrative fields (description,
  * dialogue_style, knowledge, …) are ignored here and consumed by the DM via the
  * inlined world bible. See docs/ai-architecture/14-npc-structure.md.

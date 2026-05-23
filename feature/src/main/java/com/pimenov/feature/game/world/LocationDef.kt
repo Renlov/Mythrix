@@ -3,7 +3,7 @@ package com.pimenov.feature.game.world
 import kotlinx.serialization.Serializable
 
 /**
- * A location from `world/tavern/locations.json`. Only the fields the engine
+ * A location from a story's `locations.json`. Only the fields the engine
  * needs to drive movement and scene context are typed; the rest are ignored.
  */
 @Serializable

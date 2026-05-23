@@ -3,7 +3,7 @@ package com.pimenov.feature.game.world
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** A combat enemy from `world/tavern/enemies.json`. */
+/** A combat enemy from a story's `enemies.json`. */
 @Serializable
 data class EnemyDef(
     val id: String,

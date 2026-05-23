@@ -12,6 +12,8 @@ import com.pimenov.feature.game.events.Intent
 import com.pimenov.feature.game.player.PlayerState
 import com.pimenov.feature.game.world.EnemyDef
 import com.pimenov.feature.game.world.ItemDef
+import com.pimenov.feature.game.world.StoryContentSource
+import com.pimenov.feature.game.world.StoryRules
 import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,20 +29,25 @@ import java.io.File
 /**
  * Single source of truth for the live player state during the pilot.
  *
- * On first launch state is seeded from `world/tavern/player.json`. After that
- * it is restored from a compact save file in the app's private storage. Each
+ * On first launch state is seeded from the story's `player.json` (via
+ * [StoryContentSource]). After that it is restored from a per-story save file
+ * (`save_<storyId>.json`) in the app's private storage. Each
  * applied turn persists hp, gold, inventory, quest stages and a running
  * [journal] — a short, AI-readable recap of what happened in the tavern that
  * is fed back into the system prompt so the DM keeps continuity across
  * sessions without re-sending the whole transcript.
  */
 class GameStateRepository(
-    private val context: Context,
+    context: Context,
     private val catalog: WorldCatalog,
+    private val source: StoryContentSource,
+    private val rules: StoryRules,
     private val defaultName: String,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val saveFile = File(context.filesDir, SAVE_FILE)
+    // Per-story save: each story keeps its own progress, so switching stories
+    // (incl. a downloaded one) never overwrites another's save. [FIREBASE]
+    private val saveFile = File(context.filesDir, "save_${source.storyId}.json")
 
     private val initial: SaveData = restore() ?: seedFromAssets()
 
@@ -184,15 +191,16 @@ class GameStateRepository(
     private fun sessionFor(enemyId: String, enemy: EnemyDef): CombatSession =
         combat?.takeIf { it.enemyId == enemyId } ?: CombatSession(enemyId, enemy.hp, enemy.hp)
 
-    /** Warriors fighting alongside add damage to the dragon — only if joined. */
+    /** Allies fighting alongside add damage to the boss — only once joined. */
     private fun allyDamage(enemyId: String): Int {
-        if (enemyId != DRAGON_ID) return 0
-        val joined = (_state.value.questStages[DRAGON_QUEST] ?: 0) >= 2
-        return if (joined) dice.roll(ALLY_DAMAGE_DIE) else 0
+        val ally = rules.allySupport ?: return 0
+        if (enemyId != ally.enemyId) return 0
+        val joined = (_state.value.questStages[ally.questId] ?: 0) >= ally.minStage
+        return if (joined) dice.roll(ally.damageDie) else 0
     }
 
     private fun phaseOf(enemy: EnemyDef, maxHp: Int, hp: Int): String? {
-        if (enemy.id != DRAGON_ID || maxHp <= 0) return null
+        if (enemy.id != rules.winCondition?.enemyId || maxHp <= 0) return null
         val frac = hp.toDouble() / maxHp
         return when {
             hp == 0 -> "повержен"
@@ -221,7 +229,7 @@ class GameStateRepository(
         val phase = phaseOf(enemy, session.enemyMaxHp, enemyHp)
         if (enemyHp == 0) {
             combat = null
-            val victory = enemy.id == DRAGON_ID
+            val victory = enemy.id == rules.winCondition?.enemyId
             _journal = appendJournal(_journal, "Победа в бою: ${enemy.name} повержен.")
             if (victory) _state.value = _state.value.copy(outcome = "victory")
             persist()
@@ -297,7 +305,7 @@ class GameStateRepository(
     }
 
     private fun seedFromAssets(): SaveData {
-        val obj = json.parseToJsonElement(readAsset(PLAYER_PATH)).jsonObject
+        val obj = json.parseToJsonElement(source.read("player.json")).jsonObject
         val name = obj["name"]?.jsonPrimitive?.contentOrNull() ?: defaultName
         val playerClass = obj["class"]?.jsonPrimitive?.contentOrNull() ?: "wanderer"
         val locationId = obj["location_id"]?.jsonPrimitive?.contentOrNull() ?: "loc_tavern_last_rest"
@@ -319,15 +327,10 @@ class GameStateRepository(
         return SaveData(player, journal = "")
     }
 
-    private fun readAsset(path: String): String =
-        context.assets.open(path).bufferedReader(Charsets.UTF_8).use { it.readText() }
-
     @Serializable
     private data class SaveData(val player: PlayerState, val journal: String = "")
 
     companion object {
-        private const val SAVE_FILE = "save_tavern.json"
-        private const val PLAYER_PATH = "world/tavern/player.json"
         private const val JOURNAL_MAX = 1200
         private const val PLAYER_ATTACK_BONUS = 2
         private const val PLAYER_BASE_AC = 10
@@ -336,9 +339,6 @@ class GameStateRepository(
         private const val DC_EASY = 8
         private const val DC_MEDIUM = 12
         private const val DC_HARD = 16
-        private const val DRAGON_ID = "enemy_dragon"
-        private const val DRAGON_QUEST = "quest_slay_dragon"
-        private const val ALLY_DAMAGE_DIE = "2d6"
     }
 }
 

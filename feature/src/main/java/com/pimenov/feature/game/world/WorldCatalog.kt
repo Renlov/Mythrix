@@ -1,6 +1,5 @@
 package com.pimenov.feature.game.world
 
-import android.content.Context
 import kotlinx.serialization.json.Json
 
 /**
@@ -37,20 +36,15 @@ class WorldCatalog private constructor(
         npcs.values.firstOrNull { it.role == "merchant" && it.locationId == locationId }
 
     companion object {
-        private const val ITEMS_PATH = "world/tavern/items.json"
-        private const val LOCATIONS_PATH = "world/tavern/locations.json"
-        private const val ENEMIES_PATH = "world/tavern/enemies.json"
-        private const val NPCS_PATH = "world/tavern/npcs.json"
-
-        fun load(context: Context): WorldCatalog {
+        fun load(source: StoryContentSource): WorldCatalog {
             val json = Json { ignoreUnknownKeys = true }
-            val items = json.decodeFromString<List<ItemDef>>(readAsset(context, ITEMS_PATH))
-            val locations = json.decodeFromString<List<LocationDef>>(readAsset(context, LOCATIONS_PATH))
+            val items = json.decodeFromString<List<ItemDef>>(source.read("items.json"))
+            val locations = json.decodeFromString<List<LocationDef>>(source.read("locations.json"))
             val enemies = runCatching {
-                json.decodeFromString<List<EnemyDef>>(readAsset(context, ENEMIES_PATH))
+                json.decodeFromString<List<EnemyDef>>(source.read("enemies.json"))
             }.getOrDefault(emptyList())
             val npcs = runCatching {
-                json.decodeFromString<List<NpcDef>>(readAsset(context, NPCS_PATH))
+                json.decodeFromString<List<NpcDef>>(source.read("npcs.json"))
             }.getOrDefault(emptyList())
             return WorldCatalog(
                 items = items.associateBy { it.id },
@@ -59,8 +53,5 @@ class WorldCatalog private constructor(
                 npcs = npcs.associateBy { it.id },
             )
         }
-
-        private fun readAsset(context: Context, path: String): String =
-            context.assets.open(path).bufferedReader(Charsets.UTF_8).use { it.readText() }
     }
 }

@@ -1,7 +1,7 @@
 package com.pimenov.feature.world
 
-import android.content.Context
 import com.pimenov.feature.game.player.PlayerState
+import com.pimenov.feature.game.world.StoryContentSource
 import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -13,49 +13,49 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import java.io.IOException
 
 /**
- * Loads the pilot Tavern World Bible and the DM system prompt template, then
- * assembles a single system prompt string for the LLM.
+ * Loads a story's World Bible and assembles the LLM system prompt. Story files
+ * come from a [StoryContentSource] (bundled or downloaded), so this is not tied
+ * to any single story.
  *
  * Relational RAG (см. docs/ai-architecture/02-context-assembler.md): вместо
  * всей Библии Мира в промпт подаётся только релевантное текущей сцене —
  * текущая локация и её выходы, присутствующие NPC и враги, предметы в этой
  * локации / у этих NPC / у игрока, и активные/доступные квесты. Связи берутся
  * по `id`. Mutable-поля игрока и журнал инжектятся из живого [PlayerState].
+ *
+ * [promptTemplate] — текст шаблона DM-промпта. [FIREBASE] сейчас он общий
+ * (bundled prompts/dm_system_v1.txt), но в дальнейшем может приезжать вместе со
+ * скачанным сюжетом, если история захочет свой стиль ведущего.
  */
-object TavernWorldBibleLoader {
-    private const val PROMPT_TEMPLATE = "prompts/dm_system_v1.txt"
-    private const val WORLD_DIR = "world/tavern"
-    private const val PLAYER_NAME_PLACEHOLDER = "{{player_name}}"
-
+class WorldBibleLoader(
+    private val source: StoryContentSource,
+    private val promptTemplate: String,
+) {
     private val json = Json { ignoreUnknownKeys = true }
     private val pretty = Json { prettyPrint = true }
 
     fun buildSystemPrompt(
-        context: Context,
         player: PlayerState,
         journal: String,
         catalog: WorldCatalog,
     ): String {
-        val template = readAsset(context, PROMPT_TEMPLATE)
-        val worldBlock = buildWorldBlock(context, player, journal, catalog)
-        return template.replace(PLAYER_NAME_PLACEHOLDER, player.name) + "\n\n" + worldBlock
+        val worldBlock = buildWorldBlock(player, journal, catalog)
+        return promptTemplate.replace(PLAYER_NAME_PLACEHOLDER, player.name) + "\n\n" + worldBlock
     }
 
     private fun buildWorldBlock(
-        context: Context,
         player: PlayerState,
         journal: String,
         catalog: WorldCatalog,
     ): String {
-        val playerBlock = renderPlayerBlock(context, player)
+        val playerBlock = renderPlayerBlock(player)
         val locationBlock = renderLocationBlock(player, catalog)
-        val npcs = renderNpcsForLocation(context, player, catalog)
+        val npcs = renderNpcsForLocation(player, catalog)
         val enemies = renderEnemiesForLocation(player, catalog)
-        val items = renderItemsBlock(context, player, catalog)
-        val quests = renderQuestsBlock(context, player, catalog)
+        val items = renderItemsBlock(player, catalog)
+        val quests = renderQuestsBlock(player, catalog)
 
         // Sub-headers deliberately avoid `[PLAYER]` — that token is a stop
         // marker for hallucinated next turns (see PromptBuilder.STOP_MARKERS).
@@ -113,11 +113,11 @@ object TavernWorldBibleLoader {
      * already owns are stripped from each NPC's inventory so the DM never
      * treats a sold item as still belonging to the merchant.
      */
-    private fun renderNpcsForLocation(context: Context, player: PlayerState, catalog: WorldCatalog): String {
+    private fun renderNpcsForLocation(player: PlayerState, catalog: WorldCatalog): String {
         val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
         if (present.isEmpty()) return "[]"
         val owned = player.inventoryIds.toSet()
-        val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/npcs.json")).jsonArray
+        val all = json.parseToJsonElement(source.read("npcs.json")).jsonArray
         val filtered = JsonArray(
             all.filter { it.jsonObject["id"]?.jsonPrimitive?.content in present }
                 .map { stripOwnedFromInventory(it.jsonObject, owned) },
@@ -142,10 +142,10 @@ object TavernWorldBibleLoader {
      * player holds are re-owned to `player_main` so the merchant can't claim a
      * sold item. Items tied to other places/NPCs are left out of the prompt.
      */
-    private fun renderItemsBlock(context: Context, player: PlayerState, catalog: WorldCatalog): String {
+    private fun renderItemsBlock(player: PlayerState, catalog: WorldCatalog): String {
         val owned = player.inventoryIds.toSet()
         val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
-        val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/items.json")).jsonArray
+        val all = json.parseToJsonElement(source.read("items.json")).jsonArray
         val relevant = all.filter { element ->
             val obj = element.jsonObject
             val id = obj["id"]?.jsonPrimitive?.content
@@ -175,9 +175,9 @@ object TavernWorldBibleLoader {
      * to the current location or a present NPC. Resolved/irrelevant quests are
      * left out of the prompt.
      */
-    private fun renderQuestsBlock(context: Context, player: PlayerState, catalog: WorldCatalog): String {
+    private fun renderQuestsBlock(player: PlayerState, catalog: WorldCatalog): String {
         val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
-        val all = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/quests.json")).jsonArray
+        val all = json.parseToJsonElement(source.read("quests.json")).jsonArray
         val relevant = all.filter { element ->
             val obj = element.jsonObject
             val status = obj["status"]?.jsonPrimitive?.content
@@ -214,8 +214,8 @@ object TavernWorldBibleLoader {
     }
 
     /** Static player.json with the mutable fields overwritten from [player]. */
-    private fun renderPlayerBlock(context: Context, player: PlayerState): String {
-        val base = json.parseToJsonElement(readAsset(context, "$WORLD_DIR/player.json")).jsonObject
+    private fun renderPlayerBlock(player: PlayerState): String {
+        val base = json.parseToJsonElement(source.read("player.json")).jsonObject
         val merged = buildJsonObject {
             base.forEach { (key, value) -> put(key, value) }
             put("name", player.name)
@@ -230,11 +230,7 @@ object TavernWorldBibleLoader {
         return pretty.encodeToString(JsonObject.serializer(), merged)
     }
 
-    private fun readAsset(context: Context, path: String): String {
-        return try {
-            context.assets.open(path).bufferedReader(Charsets.UTF_8).use { it.readText() }
-        } catch (e: IOException) {
-            throw IllegalStateException("Asset not found: $path", e)
-        }
+    companion object {
+        private const val PLAYER_NAME_PLACEHOLDER = "{{player_name}}"
     }
 }

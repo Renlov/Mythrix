@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Catalog entry from `world/tavern/items.json`. Only fields the engine needs
+ * Catalog entry from a story's `items.json`. Only fields the engine needs
  * are typed; the rest (damage_die, weight, …) are ignored on parse.
  */
 @Serializable

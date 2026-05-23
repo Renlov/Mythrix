@@ -1,0 +1,12 @@
+{
+  "win_condition": {
+    "type": "enemy_defeated",
+    "enemy_id": "enemy_dragon"
+  },
+  "ally_support": {
+    "quest_id": "quest_slay_dragon",
+    "min_stage": 2,
+    "enemy_id": "enemy_dragon",
+    "damage_die": "2d6"
+  }
+}
