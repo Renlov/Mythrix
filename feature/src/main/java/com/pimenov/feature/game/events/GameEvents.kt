@@ -34,6 +34,7 @@ data class Intent(
     val weapon: String? = null,
     val skill: String? = null,
     val difficulty: String? = null,
+    @SerialName("npc_id") val npcId: String? = null,
     @SerialName("quest_id") val questId: String? = null,
     @SerialName("new_stage") val newStage: Int? = null,
 )

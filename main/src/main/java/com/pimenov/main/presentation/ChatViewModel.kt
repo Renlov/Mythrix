@@ -9,6 +9,7 @@ import com.pimenov.feature.game.combat.CombatRound
 import com.pimenov.feature.game.combat.SkillCheckResult
 import com.pimenov.feature.game.events.EventParser
 import com.pimenov.feature.game.events.EventsBlock
+import com.pimenov.feature.game.events.Intent
 import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -145,7 +146,14 @@ class ChatViewModel(
             // After streaming, apply [EVENTS] to game state, then parse
             // [OPTIONS] and attach to the message.
             val events = EventParser.parse(raw)
-            events?.let { game.apply(it) }
+            // A skill_check that comes with a location_change gates the move:
+            // resolve the check first and drop the move on failure, so a failed
+            // climb/jump/persuasion keeps the player where they are.
+            val skillIntent = if (playerTurn) events?.intents?.firstOrNull { it.type == "skill_check" } else null
+            val skillResult = skillIntent?.let { game.playerSkillCheck(it.difficulty) }
+            val gatedOutMove = skillResult?.success == false && events?.locationChange != null
+            val toApply = if (gatedOutMove) events?.copy(locationChange = null) else events
+            toApply?.let { game.apply(it) }
             if (playerTurn) {
                 val narrative = cleanForDisplay(raw)
                 maybeAdvanceFindAina(prompt, narrative)
@@ -153,7 +161,11 @@ class ChatViewModel(
             }
             // Dice actions resolve only on the player's own turn — never on
             // the phase-2 outcome turn, so there's no recursion.
-            val turnResult = if (playerTurn) resolveTurnAction(events) else null
+            val turnResult = if (playerTurn) {
+                resolveTurnAction(events, skillIntent, skillResult, gatedOutMove)
+            } else {
+                null
+            }
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
@@ -193,7 +205,12 @@ class ChatViewModel(
      * Resolves a dice-driven intent (attack or skill check) and returns the
      * hidden [TURN RESULT] text for phase 2, or null if there's nothing to roll.
      */
-    private fun resolveTurnAction(events: EventsBlock?): String? {
+    private fun resolveTurnAction(
+        events: EventsBlock?,
+        skillIntent: Intent?,
+        skillResult: SkillCheckResult?,
+        gatedOutMove: Boolean,
+    ): String? {
         val intents = events?.intents ?: return null
         intents.firstOrNull { it.type == "attack" && it.target != null }?.let { attack ->
             return attack.target?.let { game.playerAttack(it) }?.let { buildCombatResult(it) }
@@ -201,8 +218,9 @@ class ChatViewModel(
         intents.firstOrNull { it.type == "use_item" }?.let {
             return game.playerHeal()?.let { round -> buildCombatResult(round) }
         }
-        intents.firstOrNull { it.type == "skill_check" }?.let { skill ->
-            return buildSkillResult(skill.skill, game.playerSkillCheck(skill.difficulty))
+        // Skill check was already rolled to gate movement — reuse that result.
+        if (skillIntent != null && skillResult != null) {
+            return buildSkillResult(skillIntent.skill, skillResult, gatedOutMove)
         }
         return null
     }
@@ -315,7 +333,11 @@ class ChatViewModel(
         }
 
         /** Hidden facts of a skill check, fed to the DM for phase-2 narration. */
-        private fun buildSkillResult(skill: String?, result: SkillCheckResult): String = buildString {
+        private fun buildSkillResult(
+            skill: String?,
+            result: SkillCheckResult,
+            gatedOutMove: Boolean,
+        ): String = buildString {
             appendLine("[TURN RESULT]")
             val label = skill?.takeIf { it.isNotBlank() }?.let { "Проверка ($it)" } ?: "Проверка"
             if (result.success) {
@@ -323,6 +345,9 @@ class ChatViewModel(
                 append("Опиши коротко, как игроку удалось, без цифр. Заверши живой деталью.")
             } else {
                 appendLine("$label — провал (бросок ${result.roll}).")
+                if (gatedOutMove) {
+                    appendLine("Игрок НЕ перешёл дальше — остаётся на месте.")
+                }
                 append("Опиши неудачу и её осязаемое последствие коротко, без цифр. Дай игроку выбор, что делать дальше, в [OPTIONS].")
             }
         }

@@ -2,6 +2,7 @@ package com.pimenov.feature.world
 
 import com.pimenov.feature.game.player.PlayerState
 import com.pimenov.feature.game.world.StoryContentSource
+import com.pimenov.feature.game.world.StoryRules
 import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -31,6 +32,7 @@ import kotlinx.serialization.json.put
  */
 class WorldBibleLoader(
     private val source: StoryContentSource,
+    private val rules: StoryRules,
     private val promptTemplate: String,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -53,6 +55,7 @@ class WorldBibleLoader(
         val playerBlock = renderPlayerBlock(player)
         val locationBlock = renderLocationBlock(player, catalog)
         val npcs = renderNpcsForLocation(player, catalog)
+        val companions = renderCompanions(player, catalog)
         val enemies = renderEnemiesForLocation(player, catalog)
         val items = renderItemsBlock(player, catalog)
         val quests = renderQuestsBlock(player, catalog)
@@ -73,6 +76,11 @@ class WorldBibleLoader(
             appendLine("[NPCS]")
             appendLine(npcs)
             appendLine()
+            companions?.let {
+                appendLine("[СПУТНИКИ]")
+                appendLine(it)
+                appendLine()
+            }
             appendLine("[ВРАГИ]")
             appendLine(enemies)
             appendLine()
@@ -95,6 +103,9 @@ class WorldBibleLoader(
             loc.atmosphere?.let { atm ->
                 appendLine("Атмосфера: ${atm.mood} — ${atm.nuance}")
             }
+            player.sceneAtmosphere?.let { shift ->
+                appendLine("Сдвиг атмосферы в этой сцене: $shift. Поддерживай его.")
+            }
             appendLine()
             appendLine("[ВЫХОДЫ]")
             val exits = loc.connections.map { id -> id to (catalog.location(id)?.name ?: id) }
@@ -109,20 +120,78 @@ class WorldBibleLoader(
     }
 
     /**
-     * Only NPCs physically present in the current location. Items the player
-     * already owns are stripped from each NPC's inventory so the DM never
-     * treats a sold item as still belonging to the merchant.
+     * Ids of NPCs the DM should treat as present this scene: those physically in
+     * the location plus any active companions travelling with the player.
+     */
+    private fun presentNpcIds(player: PlayerState, catalog: WorldCatalog): Set<String> =
+        catalog.location(player.locationId)?.npcs.orEmpty().toSet() + activeCompanionIds(player)
+
+    /** Companion ids whose join condition is met, else empty. */
+    private fun activeCompanionIds(player: PlayerState): Set<String> {
+        val c = rules.companions ?: return emptySet()
+        val joined = (player.questStages[c.questId] ?: 0) >= c.minStage
+        return if (joined) c.npcIds.toSet() else emptySet()
+    }
+
+    /**
+     * NPCs present in the current scene (location + active companions). Items the
+     * player already owns are stripped from each NPC's inventory so the DM never
+     * treats a sold item as still belonging to the merchant. Names of NPCs the
+     * player has not been introduced to are hidden (см. meet_npc).
      */
     private fun renderNpcsForLocation(player: PlayerState, catalog: WorldCatalog): String {
-        val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
+        val present = presentNpcIds(player, catalog)
         if (present.isEmpty()) return "[]"
         val owned = player.inventoryIds.toSet()
         val all = json.parseToJsonElement(source.read("npcs.json")).jsonArray
         val filtered = JsonArray(
             all.filter { it.jsonObject["id"]?.jsonPrimitive?.content in present }
-                .map { stripOwnedFromInventory(it.jsonObject, owned) },
+                .map { gateName(it.jsonObject, player.knownNpcs) }
+                .map { stripOwnedFromInventory(it, owned) },
         )
         return pretty.encodeToString(JsonArray.serializer(), filtered)
+    }
+
+    /**
+     * Hides an NPC's name until the player has met them. `name_reveal: "never"`
+     * → always hidden; default `"on_introduction"` → hidden until the id is in
+     * [known]; `"always"` → never hidden. When hidden, adds a `_name_hint` so the
+     * DM knows to emit `meet_npc` once the NPC introduces itself.
+     */
+    private fun gateName(npc: JsonObject, known: Set<String>): JsonObject {
+        val id = npc["id"]?.jsonPrimitive?.content ?: return npc
+        val reveal = npc.stringOrNull("name_reveal") ?: "on_introduction"
+        val hidden = when (reveal) {
+            "always" -> false
+            "never" -> true
+            else -> id !in known
+        }
+        if (!hidden) return npc
+        val hint = if (reveal == "never") {
+            "Этот NPC своё имя не называет — обращайся по роли, имя не раскрывай."
+        } else {
+            "Имя ещё не известно игроку — называй по роли. Когда NPC представится, " +
+                "верни intent {\"type\":\"meet_npc\",\"npc_id\":\"$id\"}."
+        }
+        return buildJsonObject {
+            npc.forEach { (key, value) ->
+                if (key == "name") put("name", JsonNull) else put(key, value)
+            }
+            put("_name_hint", JsonPrimitive(hint))
+        }
+    }
+
+    /** Companions travelling with the player; null when none are active. */
+    private fun renderCompanions(player: PlayerState, catalog: WorldCatalog): String? {
+        val ids = activeCompanionIds(player)
+        if (ids.isEmpty()) return null
+        val names = ids.mapNotNull { id ->
+            catalog.npc(id)?.let { it.name ?: it.roleLabel ?: id }
+        }
+        if (names.isEmpty()) return null
+        return "Идут рядом с игроком как союзники: ${names.joinToString(", ")}. " +
+            "Они присутствуют в каждой сцене пути и в бою — держи их в повествовании, " +
+            "а не только в логове."
     }
 
     private fun stripOwnedFromInventory(npc: JsonObject, owned: Set<String>): JsonObject {
@@ -144,7 +213,7 @@ class WorldBibleLoader(
      */
     private fun renderItemsBlock(player: PlayerState, catalog: WorldCatalog): String {
         val owned = player.inventoryIds.toSet()
-        val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
+        val present = presentNpcIds(player, catalog)
         val all = json.parseToJsonElement(source.read("items.json")).jsonArray
         val relevant = all.filter { element ->
             val obj = element.jsonObject
@@ -176,7 +245,7 @@ class WorldBibleLoader(
      * left out of the prompt.
      */
     private fun renderQuestsBlock(player: PlayerState, catalog: WorldCatalog): String {
-        val present = catalog.location(player.locationId)?.npcs.orEmpty().toSet()
+        val present = presentNpcIds(player, catalog)
         val all = json.parseToJsonElement(source.read("quests.json")).jsonArray
         val relevant = all.filter { element ->
             val obj = element.jsonObject

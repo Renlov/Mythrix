@@ -31,6 +31,21 @@ class WorldCatalog private constructor(
 
     fun npc(id: String): NpcDef? = npcs[id]
 
+    /**
+     * Resolves any attackable target — an enemy from `enemies.json` or an NPC
+     * with a `combat` block — into a uniform [Combatant]. null if [id] is neither
+     * or the NPC has no combat stats.
+     */
+    fun combatant(id: String): Combatant? {
+        enemies[id]?.let { e ->
+            return Combatant(e.id, e.name, e.hp, e.ac, e.attackDie, e.attackBonus)
+        }
+        val npc = npcs[id] ?: return null
+        val stats = npc.combat ?: return null
+        val name = npc.name ?: npc.roleLabel ?: id
+        return Combatant(npc.id, name, stats.hp, stats.ac, stats.attackDie, stats.attackBonus)
+    }
+
     /** First merchant present in the given location, if any. */
     fun merchantAt(locationId: String): NpcDef? =
         npcs.values.firstOrNull { it.role == "merchant" && it.locationId == locationId }

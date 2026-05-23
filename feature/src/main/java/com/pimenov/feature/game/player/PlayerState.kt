@@ -21,6 +21,10 @@ data class PlayerState(
     val equippedIds: Set<String> = emptySet(),
     /** Remaining charges of consumables, by item id. Absent = full per def. */
     val itemUses: Map<String, Int> = emptyMap(),
+    /** NPCs the player has been introduced to — gates name reveal in the prompt. */
+    val knownNpcs: Set<String> = emptySet(),
+    /** Transient mood override for the current scene; cleared on scene change. */
+    val sceneAtmosphere: String? = null,
     /** Pilot ending once set: "victory" or "death". null = still playing. */
     val outcome: String? = null,
 )

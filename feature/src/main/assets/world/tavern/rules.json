@@ -8,5 +8,10 @@
     "min_stage": 2,
     "enemy_id": "enemy_dragon",
     "damage_die": "2d6"
+  },
+  "companions": {
+    "quest_id": "quest_slay_dragon",
+    "min_stage": 2,
+    "npc_ids": ["npc_warrior_kettil", "npc_warrior_grim"]
   }
 }

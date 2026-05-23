@@ -22,10 +22,34 @@ object EventApplier {
                 "buy" -> buy(s, intent, catalog)
                 "drop_item" -> dropItem(s, intent.itemId)
                 "quest_advance" -> advanceQuest(s, intent)
+                "meet_npc" -> meetNpc(s, intent.npcId, catalog)
                 else -> s
             }
         }
-        return changeLocation(s, events.locationChange, catalog)
+        s = changeLocation(s, events.locationChange, catalog)
+        return applySceneFlags(s, events)
+    }
+
+    /**
+     * Scene-scoped world signals from the DM. [EventsBlock.atmosphereShift] sets
+     * a transient mood that is fed back into the next prompt; [EventsBlock.sceneEnded]
+     * closes the scene and clears that override. A location change already counts
+     * as a new scene, so it resets the override too (handled in [changeLocation]).
+     */
+    private fun applySceneFlags(state: PlayerState, events: EventsBlock): PlayerState {
+        var s = state
+        if (events.sceneEnded) s = s.copy(sceneAtmosphere = null)
+        events.atmosphereShift?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            s = s.copy(sceneAtmosphere = it)
+        }
+        return s
+    }
+
+    /** Marks an NPC as introduced so the prompt may reveal its name. */
+    private fun meetNpc(state: PlayerState, npcId: String?, catalog: WorldCatalog): PlayerState {
+        val id = npcId ?: return state
+        if (catalog.npc(id) == null || id in state.knownNpcs) return state
+        return state.copy(knownNpcs = state.knownNpcs + id)
     }
 
     /**
@@ -38,7 +62,8 @@ object EventApplier {
         if (!catalog.locationExists(target)) return state
         val current = catalog.location(state.locationId)
         if (current != null && target !in current.connections) return state
-        return state.copy(locationId = target)
+        // A new location is a new scene — drop any transient atmosphere override.
+        return state.copy(locationId = target, sceneAtmosphere = null)
     }
 
     private fun addItem(state: PlayerState, itemId: String?, catalog: WorldCatalog): PlayerState {

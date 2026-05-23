@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 data class StoryRules(
     @SerialName("win_condition") val winCondition: WinCondition? = null,
     @SerialName("ally_support") val allySupport: AllySupport? = null,
+    @SerialName("companions") val companions: Companions? = null,
 ) {
     companion object {
         private const val FILE = "rules.json"
@@ -48,4 +49,16 @@ data class AllySupport(
     @SerialName("min_stage") val minStage: Int = 1,
     @SerialName("enemy_id") val enemyId: String,
     @SerialName("damage_die") val damageDie: String,
+)
+
+/**
+ * NPCs that travel with the player once a quest reaches [minStage]. They are
+ * injected into the prompt as present in every scene from then on, so the DM
+ * keeps them in the narrative along the path — not only in the boss fight.
+ */
+@Serializable
+data class Companions(
+    @SerialName("quest_id") val questId: String,
+    @SerialName("min_stage") val minStage: Int = 1,
+    @SerialName("npc_ids") val npcIds: List<String> = emptyList(),
 )

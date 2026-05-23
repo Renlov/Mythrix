@@ -28,7 +28,7 @@ fun featureModule() = module {
         val catalog = get<WorldCatalog>()
         val template = androidContext().assets
             .open(PROMPT_TEMPLATE_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
-        val loader = WorldBibleLoader(get(), template)
+        val loader = WorldBibleLoader(source = get(), rules = get(), promptTemplate = template)
         DeepSeekLlmEngine(
             systemPromptProvider = {
                 loader.buildSystemPrompt(game.state.value, game.journal(), catalog)
