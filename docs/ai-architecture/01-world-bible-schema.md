@@ -40,15 +40,26 @@ mood становится `dangerous` до конца сцены.
 {
   "id": "npc_gatekeeper_orm",
   "name": "Орм Привратник",
+  "name_reveal": "on_introduction",
+  "role_label": "Привратник",
   "location_id": "loc_dragon_tower_gate",
   "role": "hostile",
   "race": "orc",
+  "age": 120,
   "description": "Старый орк со шрамом, охраняет врата сто лет.",
+  "dialogue_style": "грубый, короткими фразами",
+  "opening_line": "Назад, пока цел.",
   "inventory": ["item_rusty_axe"],
   "knows_about": ["quest_dragon_heart"],
-  "dialogue_style": "грубый, короткими фразами"
+  "knowledge": ["Сторожит врата сто лет.", "Знает пароль в башню."],
+  "combat": { "hp": 14, "ac": 12, "attack_die": "d8", "attack_bonus": 2 }
 }
 ```
+Полная схема полей и таблица взаимодействий с NPC (разговор, торговля,
+бой, знакомство, раскрытие квеста) — в [14-npc-structure.md](14-npc-structure.md).
+`role`: `merchant` | `civilian` | `warrior` | `hostile`. `name: null` —
+безымянный (DM зовёт по `role_label`); `name_reveal: never` — не назовётся
+даже на прямой вопрос. `combat` задаётся только у атакуемых NPC.
 
 ### `items.json`
 ```json

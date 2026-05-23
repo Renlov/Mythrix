@@ -58,9 +58,10 @@ class ChatViewModel(
     private var streamJob: Job? = null
 
     init {
-        val wares = catalog.waresOf(MERCHANT_ID).map {
-            Ware(id = it.id, name = it.name, price = it.price, type = it.type)
-        }
+        val merchantId = catalog.merchantAt(game.state.value.locationId)?.id
+        val wares = merchantId?.let { id ->
+            catalog.waresOf(id).map { Ware(id = it.id, name = it.name, price = it.price, type = it.type) }
+        }.orEmpty()
         _state.update { it.copy(wares = wares) }
 
         viewModelScope.launch {
@@ -242,7 +243,6 @@ class ChatViewModel(
     }
 
     companion object {
-        private const val MERCHANT_ID = "npc_innkeeper"
         private const val STARTER_WEAPON = "item_traveler_dagger"
 
         /** Words in the DM narrative that signal Aina's direction was revealed. */

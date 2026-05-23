@@ -11,6 +11,7 @@ class WorldCatalog private constructor(
     private val items: Map<String, ItemDef>,
     private val locations: Map<String, LocationDef>,
     private val enemies: Map<String, EnemyDef>,
+    private val npcs: Map<String, NpcDef>,
 ) {
 
     fun byId(id: String): ItemDef? = items[id]
@@ -29,10 +30,17 @@ class WorldCatalog private constructor(
 
     fun enemy(id: String): EnemyDef? = enemies[id]
 
+    fun npc(id: String): NpcDef? = npcs[id]
+
+    /** First merchant present in the given location, if any. */
+    fun merchantAt(locationId: String): NpcDef? =
+        npcs.values.firstOrNull { it.role == "merchant" && it.locationId == locationId }
+
     companion object {
         private const val ITEMS_PATH = "world/tavern/items.json"
         private const val LOCATIONS_PATH = "world/tavern/locations.json"
         private const val ENEMIES_PATH = "world/tavern/enemies.json"
+        private const val NPCS_PATH = "world/tavern/npcs.json"
 
         fun load(context: Context): WorldCatalog {
             val json = Json { ignoreUnknownKeys = true }
@@ -41,10 +49,14 @@ class WorldCatalog private constructor(
             val enemies = runCatching {
                 json.decodeFromString<List<EnemyDef>>(readAsset(context, ENEMIES_PATH))
             }.getOrDefault(emptyList())
+            val npcs = runCatching {
+                json.decodeFromString<List<NpcDef>>(readAsset(context, NPCS_PATH))
+            }.getOrDefault(emptyList())
             return WorldCatalog(
                 items = items.associateBy { it.id },
                 locations = locations.associateBy { it.id },
                 enemies = enemies.associateBy { it.id },
+                npcs = npcs.associateBy { it.id },
             )
         }
 

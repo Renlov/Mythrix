@@ -19,6 +19,7 @@
 11. [11-system-prompt.md](11-system-prompt.md) — Системный промпт DM v1 (структура, версионирование)
 12. [12-local-testing.md](12-local-testing.md) — Локальное тестирование промпта через Ollama
 13. [13-route-to-dragon.md](13-route-to-dragon.md) — Маршрут до дракона (узлы, механики, порядок)
+14. [14-npc-structure.md](14-npc-structure.md) — Структура NPC и взаимодействия (схема, кто обрабатывает)
 
 ## Ключевые принципы (TL;DR)
 
