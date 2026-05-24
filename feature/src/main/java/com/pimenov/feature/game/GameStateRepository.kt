@@ -196,6 +196,21 @@ class GameStateRepository(
         }
     }
 
+    /**
+     * Deterministic move to an adjacent [targetId], bypassing the LLM — a safety
+     * net for when the player clearly heads to an exit but the DM forgets the
+     * `location_change`. Reuses [EventApplier] validation (only connected, known
+     * locations move). Returns true when the player actually moved.
+     */
+    fun travel(targetId: String): Boolean {
+        val before = _state.value
+        val after = EventApplier.apply(before, EventsBlock(locationChange = targetId), catalog)
+        if (after.locationId == before.locationId) return false
+        _state.value = after
+        persist()
+        return true
+    }
+
     fun buy(itemId: String): Boolean {
         val before = _state.value
         val events = EventsBlock(

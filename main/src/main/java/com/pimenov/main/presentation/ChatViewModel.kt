@@ -167,6 +167,24 @@ class ChatViewModel(
         streamAssistant(prompt = trimmed, history = history, targetId = dmMsg.id, playerTurn = true)
     }
 
+    /**
+     * The player thinks instead of acting: an internal monologue (e.g. recalling
+     * Aina's face). The DM narrates the thought/memory but changes nothing in the
+     * world — no NPC reactions, no movement, no events. Disabled during a fight.
+     */
+    fun think(thought: String) {
+        val trimmed = thought.trim()
+        if (trimmed.isEmpty() || _state.value.isSending || game.isInCombat()) return
+        val userMsg = ChatMessage(nextId++, LlmMessage.Role.USER, "$THOUGHT_PREFIX$trimmed")
+        val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
+        _state.update {
+            it.copy(messages = it.messages + userMsg + dmMsg, isSending = true, error = null, currentOptions = emptyList())
+        }
+        val history = _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
+        // playerTurn = false: a thought never triggers quests, travel or combat.
+        streamAssistant(prompt = reflectionPrompt(trimmed), history = history, targetId = dmMsg.id, playerTurn = false)
+    }
+
     private fun streamAssistant(
         prompt: String,
         history: List<LlmMessage>,
@@ -185,13 +203,23 @@ class ChatViewModel(
             // After streaming, apply [EVENTS] to game state, then parse
             // [OPTIONS] and attach to the message.
             val events = EventParser.parse(raw)
+            val locBefore = game.state.value.locationId
+            val travelIntent = playerTurn && hasTravelIntent(prompt)
             // A skill_check that comes with a location_change gates the move:
             // resolve the check first and drop the move on failure, so a failed
             // climb/jump/persuasion keeps the player where they are.
             val skillIntent = if (playerTurn) events?.intents?.firstOrNull { it.type == "skill_check" } else null
             val skillResult = skillIntent?.let { game.playerSkillCheck(it.difficulty) }
             val gatedOutMove = skillResult?.success == false && events?.locationChange != null
-            val toApply = if (gatedOutMove) events?.copy(locationChange = null) else events
+            // Drop a stray location_change the DM emits on a message that isn't a
+            // skill move and isn't the player traveling (e.g. asking about wares),
+            // so the player never gets teleported by a non-travel line.
+            val spuriousMove = playerTurn && skillIntent == null &&
+                events?.locationChange != null && !travelIntent
+            val toApply = when {
+                gatedOutMove || spuriousMove -> events.copy(locationChange = null)
+                else -> events
+            }
             toApply?.let { game.apply(it) }
             if (playerTurn) {
                 val narrative = cleanForDisplay(raw)
@@ -220,20 +248,70 @@ class ChatViewModel(
             val skillTurnResult = if (playerTurn && skillIntent != null && skillResult != null) {
                 buildSkillResult(skillIntent.skill, skillResult, gatedOutMove)
             } else null
-            val options = parseOptions(raw)
-            _state.update { st ->
-                st.copy(
-                    isSending = skillTurnResult != null,
-                    currentOptions = if (skillTurnResult != null) emptyList() else options,
-                )
-            }
             if (skillTurnResult != null) {
+                _state.update { it.copy(isSending = true, currentOptions = emptyList()) }
                 runOutcomePhase2(skillTurnResult)
-            } else {
-                // Just walked into the forest? Spring the tutorial wolf.
-                maybeTriggerWolfTutorial(playerTurn)
+                return@launch
             }
+
+            // Travel safety net: the player clearly heads to an exit but the DM
+            // didn't move them — move deterministically and narrate the arrival,
+            // so they never have to repeat "I go north" turn after turn.
+            val movedByDm = game.state.value.locationId != locBefore
+            if (travelIntent && !movedByDm && skillIntent == null) {
+                val target = resolveTravelTarget(prompt, locBefore)
+                if (target != null && target !in GATED_TARGETS && game.travel(target)) {
+                    _state.update { it.copy(isSending = true, currentOptions = emptyList()) }
+                    if (target == FOREST_LOC) maybeTriggerWolfTutorial(true) else runArrivalNarration(target)
+                    return@launch
+                }
+            }
+
+            val options = parseOptions(raw)
+            // The player asked to see the merchant's goods — open the shop sheet
+            // directly instead of relying on the DM to surface the «Магазин» link.
+            val openShop = playerTurn && !game.isInCombat() &&
+                wantsShop(prompt) && _state.value.wares.isNotEmpty()
+            _state.update { st ->
+                st.copy(isSending = false, currentOptions = options, showShop = st.showShop || openShop)
+            }
+            // Just walked into the forest? Spring the tutorial wolf.
+            maybeTriggerWolfTutorial(playerTurn)
         }
+    }
+
+    /** Streams the arrival scene after a deterministic [travel] move. */
+    private fun runArrivalNarration(targetId: String) {
+        val name = catalog.location(targetId)?.name ?: "новое место"
+        runOutcomePhase2(
+            "[ПЕРЕХОД] Игрок переходит в «$name». Опиши прибытие в новую сцену в 2-3 предложениях " +
+                "по фактам [LOCATION], без цифр. В [OPTIONS] предложи, что делать здесь.",
+        )
+    }
+
+    /**
+     * Resolves which connected exit the player means: a location whose name root
+     * appears in [text], else the next/previous node on the northern route when
+     * the text says onward/north or back. null when nothing matches.
+     */
+    private fun resolveTravelTarget(text: String, fromLoc: String): String? {
+        val loc = catalog.location(fromLoc) ?: return null
+        val lowered = text.lowercase()
+        loc.connections.firstOrNull { id ->
+            val name = catalog.location(id)?.name?.lowercase() ?: return@firstOrNull false
+            name.split(' ', ',', '«', '»').any { word ->
+                word.length >= 4 && lowered.contains(word.take(4))
+            }
+        }?.let { return it }
+        val idx = NORTH_ROUTE.indexOf(fromLoc)
+        if (idx < 0) return null
+        if (NORTH_MARKERS.any { lowered.contains(it) }) {
+            NORTH_ROUTE.getOrNull(idx + 1)?.takeIf { it in loc.connections }?.let { return it }
+        }
+        if (BACK_MARKERS.any { lowered.contains(it) }) {
+            NORTH_ROUTE.getOrNull(idx - 1)?.takeIf { it in loc.connections }?.let { return it }
+        }
+        return null
     }
 
     /**
@@ -315,6 +393,14 @@ class ChatViewModel(
     /** Heuristic: does the player's combat line mean "use healing supplies"? */
     private fun wantsHeal(text: String): Boolean =
         text.lowercase().let { t -> HEAL_MARKERS.any { t.contains(it) } }
+
+    /** Heuristic: is the player setting off toward an exit? */
+    private fun hasTravelIntent(text: String): Boolean =
+        text.lowercase().let { t -> TRAVEL_MARKERS.any { t.contains(it) } }
+
+    /** Heuristic: is the player asking to see/buy the merchant's goods? */
+    private fun wantsShop(text: String): Boolean =
+        text.lowercase().let { t -> SHOP_MARKERS.any { t.contains(it) } }
 
     /**
      * Streams one DM reply into [targetId], returning the raw text (with tags).
@@ -412,6 +498,45 @@ class ChatViewModel(
 
         /** Shown when a fight continues but the DM offered no [OPTIONS]. */
         private val COMBAT_FALLBACK_OPTIONS = listOf("ударить врага", "отступить на шаг", "перевязать раны")
+
+        /** Northern progression: each step is connected to the next/previous. */
+        private val NORTH_ROUTE = listOf(
+            "loc_tavern_last_rest", "loc_village_northspur", "loc_collapsed_mines",
+            "loc_north_forest", "loc_forest_camp", "loc_ravine_crossing",
+            "loc_burned_slope", "loc_lair_mouth", "loc_dragon_lair",
+        )
+
+        /** Transitions that must go through the DM's skill check (the ravine). */
+        private val GATED_TARGETS = setOf("loc_burned_slope")
+
+        /** Verbs/phrases that signal the player is moving somewhere. */
+        private val TRAVEL_MARKERS = listOf(
+            "иду", "идём", "идем", "пойд", "пошёл", "пошел", "шага", "двига",
+            "выхожу", "выйду", "ухожу", "уйду", "направля", "бреду", "ступаю",
+            "вперёд", "вперед", "дальше", "обратно", "назад", "вернуть",
+        )
+
+        /** Onward/north markers used to pick the next route node. */
+        private val NORTH_MARKERS = listOf("север", "тракт", "дальше", "вперёд", "вперед", "дорог")
+
+        /** Back markers used to pick the previous route node. */
+        private val BACK_MARKERS = listOf("назад", "обратно", "вернуть")
+
+        /** Phrases meaning "show me what's for sale". */
+        private val SHOP_MARKERS = listOf(
+            "прода", "купить", "куплю", "покупа", "товар", "магазин",
+            "что есть", "что у тебя", "что продаёшь", "что продаешь", "лавк", "торгов",
+        )
+
+        /** Prefix on the visible bubble for a thought, to set it apart from speech/action. */
+        private const val THOUGHT_PREFIX = "(про себя) "
+
+        /** Frames a player's thought so the DM narrates a reflection, not a world action. */
+        private fun reflectionPrompt(thought: String): String =
+            "[РАЗМЫШЛЕНИЕ] Игрок не говорит и не действует — он думает про себя: «$thought». " +
+                "Опиши его мысли или воспоминание от второго лица, тихо и коротко (2-3 предложения), " +
+                "по фактам мира. Никаких реплик NPC, действий, переходов или событий. " +
+                "В [OPTIONS] предложи, что сделать дальше."
 
         /** Hidden kickoff that opens the tutorial wolf fight (narration only, no damage). */
         private const val WOLF_TUTORIAL_KICKOFF =

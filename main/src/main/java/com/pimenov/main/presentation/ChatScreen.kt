@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -163,6 +164,20 @@ fun ChatScreen(
                     maxLines = 3,
                     textStyle = MaterialTheme.typography.bodyMedium,
                 )
+                // Reflect instead of act: routes the input to an internal monologue.
+                // Hidden during a fight, where only combat actions make sense.
+                if (state.combat == null) {
+                    TextButton(
+                        onClick = {
+                            val text = input
+                            input = ""
+                            vm.think(text)
+                        },
+                        enabled = !state.isSending && input.isNotBlank(),
+                    ) {
+                        Text("Подумать")
+                    }
+                }
                 Button(
                     onClick = {
                         val text = input
