@@ -2,9 +2,12 @@ package com.pimenov.feature.game
 
 import android.content.Context
 import com.pimenov.feature.game.combat.CombatEngine
-import com.pimenov.feature.game.combat.CombatRound
+import com.pimenov.feature.game.combat.CombatHud
 import com.pimenov.feature.game.combat.CombatSession
+import com.pimenov.feature.game.combat.EnemyBlow
 import com.pimenov.feature.game.combat.DiceRoller
+import com.pimenov.feature.game.combat.HealAction
+import com.pimenov.feature.game.combat.PlayerBlow
 import com.pimenov.feature.game.combat.SkillCheckResult
 import com.pimenov.feature.game.events.EventApplier
 import com.pimenov.feature.game.events.EventsBlock
@@ -64,7 +67,39 @@ class GameStateRepository(
     private val dice = DiceRoller()
     private var combat: CombatSession? = null
 
+    private val _combatHud = MutableStateFlow<CombatHud?>(null)
+    /** Live enemy HP for the combat HUD; null when no fight is active. */
+    val combatHud: StateFlow<CombatHud?> = _combatHud.asStateFlow()
+
     fun journal(): String = _journal
+
+    /** True while a fight is in progress (an enemy is engaged). */
+    fun isInCombat(): Boolean = combat != null
+
+    /** The engaged enemy's id, or null when not fighting. */
+    fun currentEnemyId(): String? = combat?.enemyId
+
+    /** Whether [id] can be fought (a known enemy or a combat-capable NPC). */
+    fun isCombatant(id: String): Boolean = catalog.combatant(id) != null
+
+    /**
+     * Begins a fight against [enemyId] without rolling anything yet — used to
+     * stage an encounter (e.g. the tutorial wolf) so the first exchange is the
+     * player's own strike. No-op for an unknown enemy or if already fighting it.
+     */
+    fun startEncounter(enemyId: String) {
+        if (combat?.enemyId == enemyId) return
+        val target = catalog.combatant(enemyId) ?: return
+        combat = CombatSession(enemyId, target.hp, target.hp)
+        _combatHud.value = CombatHud(enemyId, target.name, target.hp, target.hp)
+    }
+
+    /** Marks the one-shot tutorial wolf encounter as started, and persists. */
+    fun markWolfTutorialTriggered() {
+        if (_state.value.tutorialWolfTriggered) return
+        _state.value = _state.value.copy(tutorialWolfTriggered = true)
+        persist()
+    }
 
     /** True when a game is already in progress (a save exists on disk). */
     fun hasSave(): Boolean = saveFile.exists()
@@ -175,67 +210,122 @@ class GameStateRepository(
     }
 
     /**
-     * Resolves one attack exchange against [enemyId]: the player swings with
-     * the equipped weapon, then — if the enemy lives — it strikes back. HP of
-     * both sides and the journal are updated. Returns null if the id is not a
-     * known enemy (e.g. the DM aimed an attack at an NPC).
+     * Rolls the player's strike against [enemyId] WITHOUT applying it. The dice
+     * (hit + weapon damage, plus any allies) are resolved now so the DM can
+     * narrate; the enemy's HP changes only when [commitPlayerBlow] runs — at the
+     * end of the narration message. Returns null for an unknown enemy.
      */
-    /** Player attacks an enemy with the equipped weapon; allies may chip in. */
-    fun playerAttack(enemyId: String): CombatRound? {
+    fun computePlayerBlow(enemyId: String): PlayerBlow? {
         val target = catalog.combatant(enemyId) ?: return null
-        val session = sessionFor(enemyId, target)
+        val active = combat?.takeIf { it.enemyId == enemyId }
+        val enemyHpBefore = active?.enemyHp ?: target.hp
+        val enemyMaxHp = active?.enemyMaxHp ?: target.hp
         val player = _state.value
         val atk = combatEngine.resolveAttack(
             attackBonus = classOf(player)?.attackBonus ?: PLAYER_ATTACK_BONUS,
             damageExpr = equippedWeaponDamage(player),
             targetAc = target.ac,
-            targetHp = session.enemyHp,
+            targetHp = enemyHpBefore,
         )
         val allies = allyDamage(enemyId)
-        val enemyHp = (atk.targetHpAfter - allies).coerceAtLeast(0)
-        return finishRound(
-            target = target, session = session, player = player, action = "attack",
-            playerHit = atk.hit, playerRoll = atk.attackRoll, playerDamage = atk.damage,
-            healed = 0, allies = allies, enemyHp = enemyHp,
+        val after = (atk.targetHpAfter - allies).coerceAtLeast(0)
+        val killed = after == 0
+        return PlayerBlow(
+            enemyId = enemyId,
+            enemyName = target.name,
+            hit = atk.hit,
+            roll = atk.attackRoll,
+            damage = atk.damage,
+            allyDamage = allies,
+            enemyHpBefore = enemyHpBefore,
+            enemyHpAfter = after,
+            enemyMaxHp = enemyMaxHp,
+            killed = killed,
+            victory = killed && target.id == rules.winCondition?.enemyId,
+            phase = phaseOf(target, enemyMaxHp, after),
         )
+    }
+
+    /** Applies a [PlayerBlow]: updates enemy HP (HUD) or ends the fight on a kill. */
+    fun commitPlayerBlow(blow: PlayerBlow) {
+        if (blow.killed) {
+            combat = null
+            _combatHud.value = null
+            _journal = appendJournal(_journal, "Победа в бою: ${blow.enemyName} повержен.")
+            if (blow.victory) _state.value = _state.value.copy(outcome = "victory")
+        } else {
+            combat = CombatSession(blow.enemyId, blow.enemyHpAfter, blow.enemyMaxHp)
+            _combatHud.value = CombatHud(blow.enemyId, blow.enemyName, blow.enemyHpAfter, blow.enemyMaxHp)
+        }
+        persist()
     }
 
     /**
-     * Player uses healing supplies. In a fight this spends the turn (allies
-     * still strike, the enemy retaliates); out of combat it just heals.
-     * Returns null if there are no supplies or charges left.
+     * Rolls the enemy [enemyId]'s retaliation against the player WITHOUT applying
+     * it. Player HP changes only when [commitEnemyBlow] runs. Returns null for an
+     * unknown enemy.
      */
-    fun playerHeal(): CombatRound? {
+    fun computeEnemyBlow(enemyId: String): EnemyBlow? {
+        val target = catalog.combatant(enemyId) ?: return null
         val player = _state.value
-        val healItem = findHealItem(player) ?: return null
-        val remaining = player.itemUses[healItem.id] ?: (healItem.uses ?: 1)
-        if (remaining <= 0) return null
-        val rolled = dice.roll(healItem.healDie ?: "d4")
-        val newHp = (player.hp + rolled).coerceAtMost(player.maxHp)
-        val healed = newHp - player.hp
-        val healedPlayer = player.copy(
-            hp = newHp,
-            itemUses = player.itemUses + (healItem.id to (remaining - 1)),
+        val atk = combatEngine.resolveAttack(
+            attackBonus = target.attackBonus,
+            damageExpr = target.attackDie,
+            targetAc = (classOf(player)?.baseAc ?: PLAYER_BASE_AC) + equippedArmorBonus(player),
+            targetHp = player.hp,
         )
-        _state.value = healedPlayer
-
-        val session = combat
-        if (session == null) {
-            persist()
-            return CombatRound(enemyName = "", action = "heal", healed = healed, playerHpAfter = newHp)
-        }
-        val target = catalog.combatant(session.enemyId) ?: return null
-        val allies = allyDamage(session.enemyId)
-        val enemyHp = (session.enemyHp - allies).coerceAtLeast(0)
-        return finishRound(
-            target = target, session = session, player = healedPlayer, action = "heal",
-            playerHit = false, playerRoll = 0, playerDamage = 0,
-            healed = healed, allies = allies, enemyHp = enemyHp,
+        return EnemyBlow(
+            enemyId = enemyId,
+            enemyName = target.name,
+            hit = atk.hit,
+            roll = atk.attackRoll,
+            damage = atk.damage,
+            playerHpBefore = player.hp,
+            playerHpAfter = atk.targetHpAfter,
+            dead = atk.killed,
         )
     }
 
-    private fun sessionFor(enemyId: String, target: Combatant): CombatSession =
-        combat?.takeIf { it.enemyId == enemyId } ?: CombatSession(enemyId, target.hp, target.hp)
+    /** Applies an [EnemyBlow]: updates player HP and ends the fight on death. */
+    fun commitEnemyBlow(blow: EnemyBlow) {
+        _state.value = _state.value.copy(
+            hp = blow.playerHpAfter,
+            outcome = if (blow.dead) "death" else _state.value.outcome,
+        )
+        if (blow.dead) {
+            combat = null
+            _combatHud.value = null
+            _journal = appendJournal(_journal, "Смерть в бою с ${blow.enemyName}.")
+        }
+        persist()
+    }
+
+    /**
+     * Rolls a use of healing supplies WITHOUT applying it. Returns null when the
+     * player carries no healing item at all; [HealAction.hadCharges] is false
+     * when the item exists but is spent (so the DM can narrate the empty wrap).
+     */
+    fun computePlayerHeal(): HealAction? {
+        val player = _state.value
+        val healItem = findHealItem(player) ?: return null
+        val remaining = player.itemUses[healItem.id] ?: (healItem.uses ?: 1)
+        if (remaining <= 0) {
+            return HealAction(healItem.id, 0, player.hp, player.hp, remainingAfter = 0, hadCharges = false)
+        }
+        val rolled = dice.roll(healItem.healDie ?: "d4")
+        val newHp = (player.hp + rolled).coerceAtMost(player.maxHp)
+        return HealAction(healItem.id, newHp - player.hp, player.hp, newHp, remaining - 1, hadCharges = true)
+    }
+
+    /** Applies a [HealAction]: raises player HP and spends a charge. */
+    fun commitPlayerHeal(action: HealAction) {
+        if (!action.hadCharges) return
+        _state.value = _state.value.copy(
+            hp = action.playerHpAfter,
+            itemUses = _state.value.itemUses + (action.itemId to action.remainingAfter),
+        )
+        persist()
+    }
 
     /** Allies fighting alongside add damage to the boss — only once joined. */
     private fun allyDamage(enemyId: String): Int {
@@ -258,53 +348,6 @@ class GameStateRepository(
 
     private fun findHealItem(player: PlayerState): ItemDef? =
         player.inventoryIds.firstNotNullOfOrNull { id -> catalog.byId(id)?.takeIf { it.healDie != null } }
-
-    /** Resolves enemy death (victory if it's the dragon) or its retaliation. */
-    private fun finishRound(
-        target: Combatant,
-        session: CombatSession,
-        player: PlayerState,
-        action: String,
-        playerHit: Boolean,
-        playerRoll: Int,
-        playerDamage: Int,
-        healed: Int,
-        allies: Int,
-        enemyHp: Int,
-    ): CombatRound {
-        val phase = phaseOf(target, session.enemyMaxHp, enemyHp)
-        if (enemyHp == 0) {
-            combat = null
-            val victory = target.id == rules.winCondition?.enemyId
-            _journal = appendJournal(_journal, "Победа в бою: ${target.name} повержен.")
-            if (victory) _state.value = _state.value.copy(outcome = "victory")
-            persist()
-            return CombatRound(
-                enemyName = target.name, action = action, playerHit = playerHit, playerRoll = playerRoll,
-                playerDamage = playerDamage, healed = healed, allyDamage = allies,
-                enemyHpAfter = 0, enemyKilled = true, enemyPhase = phase,
-                playerHpAfter = player.hp, victory = victory,
-            )
-        }
-        val enemyAtk = combatEngine.resolveAttack(
-            attackBonus = target.attackBonus,
-            damageExpr = target.attackDie,
-            targetAc = (classOf(player)?.baseAc ?: PLAYER_BASE_AC) + equippedArmorBonus(player),
-            targetHp = player.hp,
-        )
-        val dead = enemyAtk.killed
-        _state.value = player.copy(hp = enemyAtk.targetHpAfter, outcome = if (dead) "death" else player.outcome)
-        combat = if (dead) null else session.copy(enemyHp = enemyHp)
-        if (dead) _journal = appendJournal(_journal, "Смерть в бою с ${target.name}.")
-        persist()
-        return CombatRound(
-            enemyName = target.name, action = action, playerHit = playerHit, playerRoll = playerRoll,
-            playerDamage = playerDamage, healed = healed, allyDamage = allies,
-            enemyHpAfter = enemyHp, enemyKilled = false, enemyPhase = phase,
-            enemyHit = enemyAtk.hit, enemyDamage = enemyAtk.damage,
-            playerHpAfter = enemyAtk.targetHpAfter, playerDead = dead,
-        )
-    }
 
     /** Resolves a d20 skill check at the named difficulty (easy/medium/hard). */
     fun playerSkillCheck(difficulty: String?): SkillCheckResult {

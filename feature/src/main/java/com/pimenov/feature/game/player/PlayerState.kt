@@ -29,4 +29,6 @@ data class PlayerState(
     val sceneAtmosphere: String? = null,
     /** Pilot ending once set: "victory" or "death". null = still playing. */
     val outcome: String? = null,
+    /** True once the tutorial wolf encounter has been started, so it fires once. */
+    val tutorialWolfTriggered: Boolean = false,
 )

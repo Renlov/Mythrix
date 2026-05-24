@@ -2,14 +2,17 @@ package com.pimenov.main.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pimenov.feature.api.ContextUsage
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.api.LlmMessage
 import com.pimenov.feature.game.GameStateRepository
-import com.pimenov.feature.game.combat.CombatRound
+import com.pimenov.feature.impl.ContextMeter
+import com.pimenov.feature.game.combat.CombatHud
+import com.pimenov.feature.game.combat.EnemyBlow
+import com.pimenov.feature.game.combat.HealAction
+import com.pimenov.feature.game.combat.PlayerBlow
 import com.pimenov.feature.game.combat.SkillCheckResult
 import com.pimenov.feature.game.events.EventParser
-import com.pimenov.feature.game.events.EventsBlock
-import com.pimenov.feature.game.events.Intent
 import com.pimenov.feature.game.world.WorldCatalog
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +45,10 @@ data class ChatState(
     val leads: List<String> = emptyList(),
     /** Pilot ending: "victory" | "death" | null. Non-null shows the end overlay. */
     val outcome: String? = null,
+    /** Latest context-window usage from the model, null until the first reply. */
+    val context: ContextUsage? = null,
+    /** Live enemy HP while a fight is active; null outside combat. */
+    val combat: CombatHud? = null,
 ) {
     val visibleMessages: List<ChatMessage> get() = messages.filterNot { it.hidden }
 }
@@ -50,6 +57,7 @@ class ChatViewModel(
     private val engine: LlmEngine,
     private val game: GameStateRepository,
     private val catalog: WorldCatalog,
+    private val contextMeter: ContextMeter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -84,6 +92,16 @@ class ChatViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            contextMeter.usage.collect { usage ->
+                _state.update { it.copy(context = usage) }
+            }
+        }
+        viewModelScope.launch {
+            game.combatHud.collect { hud ->
+                _state.update { it.copy(combat = hud) }
+            }
+        }
         startSession(OPENING_ACTION)
     }
 
@@ -113,6 +131,22 @@ class ChatViewModel(
         val trimmed = userText.trim()
         if (trimmed.isEmpty() || _state.value.isSending) return
 
+        // In an active fight the player's line IS the combat action — skip the
+        // generic DM turn and resolve the two-message round directly.
+        if (game.isInCombat()) {
+            val enemyId = game.currentEnemyId()
+            if (enemyId != null) {
+                val userMsg = ChatMessage(nextId++, LlmMessage.Role.USER, trimmed)
+                _state.update {
+                    it.copy(messages = it.messages + userMsg, isSending = true, error = null, currentOptions = emptyList())
+                }
+                streamJob = viewModelScope.launch {
+                    runCombatRound(enemyId, heal = wantsHeal(trimmed))
+                }
+                return
+            }
+        }
+
         val userMsg = ChatMessage(nextId++, LlmMessage.Role.USER, trimmed)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
 
@@ -140,11 +174,13 @@ class ChatViewModel(
         playerTurn: Boolean,
     ) {
         streamJob = viewModelScope.launch {
-            var raw = streamOnce(prompt, history, targetId)
+            var raw = streamOnce(prompt, history, targetId, live = true)
             // Validation + one retry: if the [EVENTS] block didn't parse,
-            // re-ask once with a format reminder. Cheap safety net.
+            // re-ask once with a format reminder. The retry streams silently —
+            // the first reply stays on screen and the bubble is swapped once at
+            // the end, so the player never sees the answer erased and retyped.
             if (EventParser.parse(raw) == null) {
-                raw = streamOnce(prompt + RETRY_HINT, history, targetId)
+                raw = streamOnce(prompt + RETRY_HINT, history, targetId, live = false)
             }
             // After streaming, apply [EVENTS] to game state, then parse
             // [OPTIONS] and attach to the message.
@@ -162,70 +198,161 @@ class ChatViewModel(
                 maybeAdvanceFindAina(prompt, narrative)
                 maybeAdvanceDragon(prompt, narrative)
             }
-            // Dice actions resolve only on the player's own turn — never on
-            // the phase-2 outcome turn, so there's no recursion.
-            val turnResult = if (playerTurn) {
-                resolveTurnAction(events, skillIntent, skillResult, gatedOutMove)
-            } else {
-                null
+            // The phase-1 bubble is done streaming.
+            _state.update { st ->
+                st.copy(messages = st.messages.map { m -> if (m.id == targetId) m.copy(isStreaming = false) else m })
             }
+
+            // Combat: a DM attack intent on the player's turn opens the deferred
+            // two-message round (player blow, then enemy reply). Dice resolve only
+            // on the player's own turn, never on a phase-2 outcome turn.
+            val attackTarget = if (playerTurn) {
+                events?.intents?.firstOrNull { it.type == "attack" && it.target != null }?.target
+            } else null
+            if (attackTarget != null && game.isCombatant(attackTarget)) {
+                game.startEncounter(attackTarget)
+                _state.update { it.copy(isSending = true, currentOptions = emptyList()) }
+                runCombatRound(attackTarget, heal = false)
+                return@launch
+            }
+
+            // Skill check outcome (phase 2), if any.
+            val skillTurnResult = if (playerTurn && skillIntent != null && skillResult != null) {
+                buildSkillResult(skillIntent.skill, skillResult, gatedOutMove)
+            } else null
             val options = parseOptions(raw)
             _state.update { st ->
                 st.copy(
-                    // Stay "sending" if an outcome turn is about to run.
-                    isSending = turnResult != null,
-                    currentOptions = if (turnResult != null) emptyList() else options,
-                    messages = st.messages.map { m ->
-                        if (m.id == targetId) m.copy(isStreaming = false) else m
-                    },
+                    isSending = skillTurnResult != null,
+                    currentOptions = if (skillTurnResult != null) emptyList() else options,
                 )
             }
-            // Phase 2: narrate the dice outcome AFTER phase-1 text is shown.
-            turnResult?.let { runOutcomePhase2(it) }
+            if (skillTurnResult != null) {
+                runOutcomePhase2(skillTurnResult)
+            } else {
+                // Just walked into the forest? Spring the tutorial wolf.
+                maybeTriggerWolfTutorial(playerTurn)
+            }
         }
     }
 
-    /** Streams one DM reply into [targetId], returning the raw text (with tags). */
-    private suspend fun streamOnce(prompt: String, history: List<LlmMessage>, targetId: Long): String {
+    /**
+     * One combat round in two visible messages: the player's blow (enemy HP
+     * lands at the end of that message) and — if the enemy survives — its reply
+     * (player HP lands at the end of its message). HP is committed only after
+     * each narration finishes streaming, never before.
+     */
+    private suspend fun runCombatRound(enemyId: String, heal: Boolean) {
+        if (heal) {
+            val action = game.computePlayerHeal()
+            streamCombatTurn(buildHealResult(action))
+            action?.takeIf { it.hadCharges }?.let { game.commitPlayerHeal(it) }
+        } else {
+            val blow = game.computePlayerBlow(enemyId)
+            if (blow == null) {
+                _state.update { it.copy(isSending = false) }
+                return
+            }
+            val raw1 = streamCombatTurn(buildPlayerBlowResult(blow))
+            game.commitPlayerBlow(blow) // enemy HP lands now, at the end of the message
+            if (blow.killed) {
+                finishCombat(raw1)
+                return
+            }
+        }
+        // Enemy retaliation — its own message; player HP lands at the end of it.
+        val counter = game.computeEnemyBlow(enemyId)
+        if (counter == null) {
+            _state.update { it.copy(isSending = false) }
+            return
+        }
+        val raw2 = streamCombatTurn(buildEnemyBlowResult(counter))
+        game.commitEnemyBlow(counter)
+        finishCombat(raw2)
+    }
+
+    /** Streams one combat narration message from a hidden [TURN RESULT]; returns raw text. */
+    private suspend fun streamCombatTurn(resultText: String): String {
+        val hidden = ChatMessage(nextId++, LlmMessage.Role.USER, resultText, hidden = true)
+        val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
+        _state.update { it.copy(messages = it.messages + hidden + dmMsg) }
+        val history = _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
+        val raw = streamOnce(resultText, history, dmMsg.id, live = true)
+        _state.update { st ->
+            st.copy(messages = st.messages.map { m -> if (m.id == dmMsg.id) m.copy(isStreaming = false) else m })
+        }
+        return raw
+    }
+
+    /** Closes a round: stops sending and offers the next combat actions. */
+    private fun finishCombat(rawLast: String) {
+        val options = parseOptions(rawLast)
+        _state.update {
+            it.copy(
+                isSending = false,
+                currentOptions = if (game.isInCombat()) options.ifEmpty { COMBAT_FALLBACK_OPTIONS } else options,
+            )
+        }
+    }
+
+    /**
+     * Fires the one-shot tutorial fight the first time the player reaches the
+     * forest: the wolf lunges (narration only, no damage), then the player's
+     * strikes drive the two-message rounds.
+     */
+    private suspend fun maybeTriggerWolfTutorial(playerTurn: Boolean) {
+        if (!playerTurn) return
+        val ps = game.state.value
+        if (ps.locationId != FOREST_LOC || ps.tutorialWolfTriggered || ps.outcome != null || game.isInCombat()) return
+        game.markWolfTutorialTriggered()
+        game.startEncounter(WOLF_ID)
+        _state.update { it.copy(isSending = true, currentOptions = emptyList()) }
+        val raw = streamCombatTurn(WOLF_TUTORIAL_KICKOFF)
+        val options = parseOptions(raw)
+        _state.update { it.copy(isSending = false, currentOptions = options.ifEmpty { COMBAT_FALLBACK_OPTIONS }) }
+    }
+
+    /** Heuristic: does the player's combat line mean "use healing supplies"? */
+    private fun wantsHeal(text: String): Boolean =
+        text.lowercase().let { t -> HEAL_MARKERS.any { t.contains(it) } }
+
+    /**
+     * Streams one DM reply into [targetId], returning the raw text (with tags).
+     * When [live] is true the bubble updates token-by-token; when false the
+     * stream is collected silently and the bubble is set once at the end (used
+     * for the format retry so the visible answer isn't wiped mid-stream).
+     */
+    private suspend fun streamOnce(
+        prompt: String,
+        history: List<LlmMessage>,
+        targetId: Long,
+        live: Boolean,
+    ): String {
         val buffer = StringBuilder()
         runCatching {
             engine.generate(prompt, history).collect { delta ->
                 buffer.append(delta)
-                val display = cleanForDisplay(buffer.toString())
-                _state.update { st ->
-                    st.copy(messages = st.messages.map { m ->
-                        if (m.id == targetId) m.copy(text = display) else m
-                    })
+                if (live) {
+                    val display = cleanForDisplay(buffer.toString())
+                    _state.update { st ->
+                        st.copy(messages = st.messages.map { m ->
+                            if (m.id == targetId) m.copy(text = display) else m
+                        })
+                    }
                 }
             }
         }.onFailure { e ->
             _state.update { it.copy(error = e.message ?: "Ошибка запроса") }
         }
+        if (!live) {
+            val display = cleanForDisplay(buffer.toString())
+            _state.update { st ->
+                st.copy(messages = st.messages.map { m ->
+                    if (m.id == targetId) m.copy(text = display) else m
+                })
+            }
+        }
         return buffer.toString()
-    }
-
-    /**
-     * Resolves a dice-driven intent (attack or skill check) and returns the
-     * hidden [TURN RESULT] text for phase 2, or null if there's nothing to roll.
-     */
-    private fun resolveTurnAction(
-        events: EventsBlock?,
-        skillIntent: Intent?,
-        skillResult: SkillCheckResult?,
-        gatedOutMove: Boolean,
-    ): String? {
-        val intents = events?.intents ?: return null
-        intents.firstOrNull { it.type == "attack" && it.target != null }?.let { attack ->
-            return attack.target?.let { game.playerAttack(it) }?.let { buildCombatResult(it) }
-        }
-        intents.firstOrNull { it.type == "use_item" }?.let {
-            return game.playerHeal()?.let { round -> buildCombatResult(round) }
-        }
-        // Skill check was already rolled to gate movement — reuse that result.
-        if (skillIntent != null && skillResult != null) {
-            return buildSkillResult(skillIntent.skill, skillResult, gatedOutMove)
-        }
-        return null
     }
 
     /** Feeds a hidden [TURN RESULT] to the DM and streams the outcome narration. */
@@ -276,6 +403,24 @@ class ChatViewModel(
     companion object {
         private const val STARTER_WEAPON = "item_traveler_dagger"
 
+        /** Tutorial wolf encounter: the location it fires in and the enemy id. */
+        private const val FOREST_LOC = "loc_north_forest"
+        private const val WOLF_ID = "enemy_forest_wolf"
+
+        /** Words in a combat line that mean "use healing supplies". */
+        private val HEAL_MARKERS = listOf("леч", "перевяз", "припас", "бинт", "зелье", "мазь")
+
+        /** Shown when a fight continues but the DM offered no [OPTIONS]. */
+        private val COMBAT_FALLBACK_OPTIONS = listOf("ударить врага", "отступить на шаг", "перевязать раны")
+
+        /** Hidden kickoff that opens the tutorial wolf fight (narration only, no damage). */
+        private const val WOLF_TUTORIAL_KICKOFF =
+            "[TUTORIAL] Игрок впервые вышел на лесную тропу. Из подлеска ему наперерез " +
+                "бросается тощий волк — он голоден и не отступит. Это первый бой и обучение. " +
+                "Опиши нападение волка в 2-3 предложениях (волк только бросается навстречу, ещё не ударил). " +
+                "Затем одной фразой подскажи: чтобы атаковать, напиши, как и чем ты бьёшь. " +
+                "В [OPTIONS] дай 2-3 конкретных варианта удара. НЕ списывай урон и не решай исход боя."
+
         /** Words in the DM narrative that signal Aina's direction was revealed. */
         private val DIRECTION_MARKERS = listOf(
             "север", "тракт", "на север", "ушла", "дорог", "отрог",
@@ -293,46 +438,65 @@ class ChatViewModel(
             "идём вместе", "с вами на рассвете",
         )
 
-        /** Hidden facts of a combat round, fed to the DM for phase-2 narration. */
-        private fun buildCombatResult(round: CombatRound): String = buildString {
+        /** Player's strike facts for the DM to narrate (enemy HP not yet applied). */
+        private fun buildPlayerBlowResult(blow: PlayerBlow): String = buildString {
             appendLine("[TURN RESULT]")
-            val enemy = round.enemyName.ifBlank { "враг" }
-            if (round.action == "heal") {
-                if (round.healed > 0) {
-                    appendLine("Игрок пускает в ход лечебные припасы и восстанавливает силы (+${round.healed}).")
-                } else {
-                    appendLine("Игрок тянется к лечебным припасам, но они кончились.")
+            val enemy = blow.enemyName.ifBlank { "враг" }
+            if (blow.hit) {
+                appendLine("Игрок попал по «$enemy» (бросок ${blow.roll}), урон ${blow.damage}.")
+            } else {
+                appendLine("Игрок промахнулся по «$enemy» (бросок ${blow.roll}).")
+            }
+            if (blow.allyDamage > 0) {
+                appendLine("Воины бьются рядом и наносят «$enemy» урон ${blow.allyDamage}.")
+            }
+            blow.phase?.let { appendLine("Состояние «$enemy»: $it.") }
+            when {
+                blow.victory -> {
+                    appendLine("«$enemy» повержен. ПОБЕДА — это финал.")
+                    append("Опиши гибель «$enemy» и победу коротко, без цифр, с весом. Это конец пилота.")
                 }
-            } else if (round.playerHit) {
-                appendLine("Игрок попал по «$enemy» (бросок ${round.playerRoll}), урон ${round.playerDamage}.")
+                blow.killed -> {
+                    appendLine("«$enemy» убит.")
+                    append("Опиши, как «$enemy» падает, коротко, без цифр. Заверши живой деталью.")
+                }
+                else ->
+                    append(
+                        "Опиши, как удар игрока ${if (blow.hit) "достаёт" else "проходит мимо"} «$enemy», " +
+                            "коротко и без цифр. НЕ описывай ответный удар врага — он будет следующим ходом.",
+                    )
+            }
+        }
+
+        /** Enemy's retaliation facts for the DM to narrate (player HP not yet applied). */
+        private fun buildEnemyBlowResult(blow: EnemyBlow): String = buildString {
+            appendLine("[TURN RESULT]")
+            val enemy = blow.enemyName.ifBlank { "враг" }
+            if (blow.hit) {
+                appendLine("«$enemy» бьёт в ответ и попадает (бросок ${blow.roll}), урон ${blow.damage}.")
             } else {
-                appendLine("Игрок промахнулся по «$enemy» (бросок ${round.playerRoll}).")
+                appendLine("«$enemy» бьёт в ответ и промахивается (бросок ${blow.roll}).")
             }
-            if (round.allyDamage > 0) {
-                appendLine("Воины бьются рядом и наносят «$enemy» урон ${round.allyDamage}.")
-            }
-            round.enemyPhase?.let { appendLine("Состояние «$enemy»: $it.") }
-            if (round.victory) {
-                appendLine("«$enemy» повержен. ПОБЕДА — это финал.")
-                append("Опиши гибель дракона и победу коротко, без цифр, с весом. Это конец пилота.")
-                return@buildString
-            }
-            if (round.enemyKilled) {
-                appendLine("«$enemy» убит.")
-                append("Опиши победу над врагом коротко, без цифр. Заверши живой деталью.")
-                return@buildString
-            }
-            if (round.enemyHit) {
-                appendLine("«$enemy» бьёт в ответ, урон ${round.enemyDamage}.")
-            } else {
-                appendLine("«$enemy» бьёт в ответ и промахивается.")
-            }
-            if (round.playerDead) {
+            if (blow.dead) {
                 appendLine("Игрок погибает. КОНЕЦ.")
                 append("Опиши смерть игрока коротко и без цифр. Это конец.")
             } else {
-                append("Опиши обмен коротко, без цифр. Бой продолжается — предложи действия в [OPTIONS].")
+                append(
+                    "Опиши ответный удар «$enemy» коротко, без цифр. Бой продолжается — " +
+                        "в [OPTIONS] предложи конкретные варианты следующего удара.",
+                )
             }
+        }
+
+        /** Heal facts for the DM to narrate (HP not yet applied). [action] null = no supplies at all. */
+        private fun buildHealResult(action: HealAction?): String = buildString {
+            appendLine("[TURN RESULT]")
+            if (action == null || !action.hadCharges) {
+                appendLine("Игрок тянется к лечебным припасам, но их нет.")
+            } else {
+                appendLine("Игрок пускает в ход лечебные припасы и восстанавливает силы (+${action.healed}).")
+            }
+            append("Опиши это коротко, без цифр. Следом враг бьёт в ответ.")
         }
 
         /** Hidden facts of a skill check, fed to the DM for phase-2 narration. */

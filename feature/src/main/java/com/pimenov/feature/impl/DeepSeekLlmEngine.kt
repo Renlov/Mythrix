@@ -85,7 +85,10 @@ class DeepSeekLlmEngine(
             messages = messages,
             stream = true,
             temperature = 0.8,
-            maxTokens = 400,
+            // Russian (Cyrillic) is token-heavy; 400 often truncated the
+            // trailing [EVENTS] JSON, which forced a visible retry. Higher cap
+            // lets narrative + options + events fit in one pass.
+            maxTokens = 768,
             streamOptions = StreamOptions(includeUsage = true),
         )
 

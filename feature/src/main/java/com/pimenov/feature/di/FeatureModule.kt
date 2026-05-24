@@ -8,6 +8,8 @@ import com.pimenov.feature.game.world.ClassCatalog
 import com.pimenov.feature.game.world.StoryContentSource
 import com.pimenov.feature.game.world.StoryRules
 import com.pimenov.feature.game.world.WorldCatalog
+import com.pimenov.feature.impl.CompositeTurnLogger
+import com.pimenov.feature.impl.ContextMeter
 import com.pimenov.feature.impl.DeepSeekLlmEngine
 import com.pimenov.feature.impl.FirebaseTurnLogger
 import com.pimenov.feature.world.WorldBibleLoader
@@ -28,8 +30,17 @@ fun featureModule() = module {
     single { StoryRules.load(get()) }
     single { ClassCatalog.load(get()) }
     single { GameStateRepository(androidContext(), get(), get(), get(), get(), defaultName = "Кейн") }
+    // Observable token meter for the UI; also receives every turn as a logger.
+    single { ContextMeter() }
     // One logging session per app launch. Best-effort; no-op until Firebase is set up.
-    single<TurnLogger> { FirebaseTurnLogger(sessionId = UUID.randomUUID().toString()) }
+    single<TurnLogger> {
+        CompositeTurnLogger(
+            listOf(
+                FirebaseTurnLogger(sessionId = UUID.randomUUID().toString()),
+                get<ContextMeter>(),
+            ),
+        )
+    }
     single<LlmEngine> {
         val game = get<GameStateRepository>()
         val catalog = get<WorldCatalog>()

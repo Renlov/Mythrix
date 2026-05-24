@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -49,7 +50,9 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pimenov.feature.api.ContextUsage
 import com.pimenov.feature.api.LlmMessage
+import com.pimenov.feature.game.combat.CombatHud
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -107,6 +110,8 @@ fun ChatScreen(
                     onClick = { showSheet = true },
                 )
             }
+            state.context?.let { ContextMeter(it) }
+            state.combat?.let { EnemyHpBar(it, playerHp = state.player.hp, playerMaxHp = state.player.maxHp) }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -275,6 +280,96 @@ private fun QuestBanner(quest: QuestObjective, modifier: Modifier = Modifier) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Thin context-window meter under the quest banner: a fill bar plus
+ * "осталось N / window" tokens. Turns to the error color as the window fills
+ * past ~85%, so the player notices before hitting the limit.
+ */
+@Composable
+private fun ContextMeter(usage: ContextUsage) {
+    val warn = usage.fraction >= 0.85f
+    val barColor = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = "Контекст: осталось ${grouped(usage.remaining)} из ${grouped(usage.window)} токенов",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (warn) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LinearProgressIndicator(
+            progress = { usage.fraction },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp)),
+            color = barColor,
+        )
+    }
+}
+
+/** 65536 -> "65 536" for readability. */
+private fun grouped(value: Int): String =
+    value.toString().reversed().chunked(3).joinToString(" ").reversed()
+
+/**
+ * Combat HUD: the enemy's HP (red) and the player's HP (green) as labelled bars,
+ * shown only while a fight is active. HP values update at the end of each
+ * narration message, so the bars move in step with the story.
+ */
+@Composable
+private fun EnemyHpBar(hud: CombatHud, playerHp: Int, playerMaxHp: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        HpRow(
+            label = hud.enemyName,
+            hp = hud.enemyHp,
+            maxHp = hud.enemyMaxHp,
+            color = MaterialTheme.colorScheme.error,
+        )
+        HpRow(
+            label = "Ты",
+            hp = playerHp,
+            maxHp = playerMaxHp,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun HpRow(label: String, hp: Int, maxHp: Int, color: Color) {
+    val fraction = if (maxHp <= 0) 0f else (hp.toFloat() / maxHp).coerceIn(0f, 1f)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.width(96.dp),
+        )
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(4.dp)),
+            color = color,
+        )
+        Text(
+            text = "$hp/$maxHp",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(48.dp),
+        )
     }
 }
 
