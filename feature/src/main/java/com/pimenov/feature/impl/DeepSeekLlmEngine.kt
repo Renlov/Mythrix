@@ -3,6 +3,8 @@ package com.pimenov.feature.impl
 import com.pimenov.feature.BuildConfig
 import com.pimenov.feature.api.LlmEngine
 import com.pimenov.feature.api.LlmMessage
+import com.pimenov.feature.api.TurnLog
+import com.pimenov.feature.api.TurnLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
@@ -35,6 +37,8 @@ class DeepSeekLlmEngine(
     private val systemPromptProvider: suspend () -> String,
     private val model: String = DEFAULT_MODEL,
     private val apiKey: String = BuildConfig.DEEPSEEK_API_KEY,
+    private val logger: TurnLogger = TurnLogger.NoOp,
+    private val contextWindow: Int = CONTEXT_WINDOW,
 ) : LlmEngine {
 
     override val id: String = "deepseek:$model"
@@ -82,7 +86,11 @@ class DeepSeekLlmEngine(
             stream = true,
             temperature = 0.8,
             maxTokens = 400,
+            streamOptions = StreamOptions(includeUsage = true),
         )
+
+        val full = StringBuilder()
+        var usage: StreamChunk.Usage? = null
 
         client.preparePost(ENDPOINT) {
             header("Authorization", "Bearer $apiKey")
@@ -101,12 +109,44 @@ class DeepSeekLlmEngine(
                 val payload = line.removePrefix("data:").trim()
                 if (payload.isEmpty()) continue
                 if (payload == "[DONE]") break
-                val delta = runCatching {
+                val chunk = runCatching {
                     json.decodeFromString(StreamChunk.serializer(), payload)
-                        .choices.firstOrNull()?.delta?.content
                 }.getOrNull() ?: continue
-                if (delta.isNotEmpty()) emit(delta)
+                // The final usage chunk (include_usage) carries no choices.
+                chunk.usage?.let { usage = it }
+                val delta = chunk.choices.firstOrNull()?.delta?.content ?: continue
+                if (delta.isNotEmpty()) {
+                    full.append(delta)
+                    emit(delta)
+                }
             }
+            logTurn(systemPrompt, userPrompt, history, full.toString(), usage)
+        }
+    }
+
+    /** Best-effort: record the full request/response and token budget. */
+    private fun logTurn(
+        systemPrompt: String,
+        userPrompt: String,
+        history: List<LlmMessage>,
+        response: String,
+        usage: StreamChunk.Usage?,
+    ) {
+        runCatching {
+            logger.log(
+                TurnLog(
+                    model = model,
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    history = history,
+                    response = response,
+                    promptTokens = usage?.promptTokens,
+                    completionTokens = usage?.completionTokens,
+                    totalTokens = usage?.totalTokens,
+                    contextWindow = contextWindow,
+                    remainingContext = usage?.totalTokens?.let { contextWindow - it },
+                ),
+            )
         }
     }
 
@@ -114,6 +154,8 @@ class DeepSeekLlmEngine(
         private const val ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
         /** DeepSeek V3 — основной чат-эндпоинт. */
         const val DEFAULT_MODEL = "deepseek-chat"
+        /** deepseek-chat context window (64K tokens). Used to estimate headroom. */
+        const val CONTEXT_WINDOW = 65_536
     }
 }
 
@@ -124,16 +166,32 @@ private data class ChatRequest(
     val stream: Boolean,
     val temperature: Double,
     @SerialName("max_tokens") val maxTokens: Int,
+    @SerialName("stream_options") val streamOptions: StreamOptions? = null,
+)
+
+@Serializable
+private data class StreamOptions(
+    @SerialName("include_usage") val includeUsage: Boolean,
 )
 
 @Serializable
 private data class ApiMessage(val role: String, val content: String)
 
 @Serializable
-private data class StreamChunk(val choices: List<Choice> = emptyList()) {
+private data class StreamChunk(
+    val choices: List<Choice> = emptyList(),
+    val usage: Usage? = null,
+) {
     @Serializable
     data class Choice(val delta: Delta = Delta())
 
     @Serializable
     data class Delta(val content: String = "")
+
+    @Serializable
+    data class Usage(
+        @SerialName("prompt_tokens") val promptTokens: Int = 0,
+        @SerialName("completion_tokens") val completionTokens: Int = 0,
+        @SerialName("total_tokens") val totalTokens: Int = 0,
+    )
 }

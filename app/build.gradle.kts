@@ -3,6 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Apply the google-services plugin only once google-services.json is present, so
+// the project still builds before Firebase is configured. Drop the file into
+// app/ (from the Firebase console) and logging activates automatically.
+if (file("google-services.json").exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+}
+
 android {
     namespace = "com.pimenov.mythrix"
     compileSdk {
@@ -44,6 +51,9 @@ dependencies {
     implementation(project(":uikit"))
     implementation(project(":main"))
     implementation(project(":feature"))
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

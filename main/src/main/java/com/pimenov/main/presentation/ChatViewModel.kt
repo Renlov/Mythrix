@@ -59,17 +59,17 @@ class ChatViewModel(
     private var streamJob: Job? = null
 
     init {
-        val merchantId = catalog.merchantAt(game.state.value.locationId)?.id
-        val wares = merchantId?.let { id ->
-            catalog.waresOf(id).map { Ware(id = it.id, name = it.name, price = it.price, type = it.type) }
-        }.orEmpty()
-        _state.update { it.copy(wares = wares) }
-
         viewModelScope.launch {
             game.state.collect { ps ->
                 val hasWeapon = ps.inventoryIds.any { id ->
                     id != STARTER_WEAPON && catalog.byId(id)?.type == "weapon"
                 }
+                // Wares track the merchant of the CURRENT location, so the shop
+                // reflects where the player is now (empty once they leave the tavern).
+                val wares = catalog.merchantAt(ps.locationId)?.let { merchant ->
+                    catalog.waresOf(merchant.id)
+                        .map { Ware(id = it.id, name = it.name, price = it.price, type = it.type) }
+                }.orEmpty()
                 _state.update {
                     it.copy(
                         player = ps.toSheet(catalog),
@@ -77,6 +77,9 @@ class ChatViewModel(
                         leads = TavernPilotQuest.leadsFor(ps.questStages),
                         ownedItemIds = ps.inventoryIds.toSet(),
                         outcome = ps.outcome,
+                        wares = wares,
+                        // A shop with no wares can't stay open.
+                        showShop = it.showShop && wares.isNotEmpty(),
                     )
                 }
             }

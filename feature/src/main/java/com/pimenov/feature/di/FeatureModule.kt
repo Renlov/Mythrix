@@ -1,6 +1,7 @@
 package com.pimenov.feature.di
 
 import com.pimenov.feature.api.LlmEngine
+import com.pimenov.feature.api.TurnLogger
 import com.pimenov.feature.game.GameStateRepository
 import com.pimenov.feature.game.world.AssetStoryContentSource
 import com.pimenov.feature.game.world.ClassCatalog
@@ -8,9 +9,11 @@ import com.pimenov.feature.game.world.StoryContentSource
 import com.pimenov.feature.game.world.StoryRules
 import com.pimenov.feature.game.world.WorldCatalog
 import com.pimenov.feature.impl.DeepSeekLlmEngine
+import com.pimenov.feature.impl.FirebaseTurnLogger
 import com.pimenov.feature.world.WorldBibleLoader
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
+import java.util.UUID
 
 // Active story for the pilot. Bundled in the APK under assets/world/<id>/.
 // [FIREBASE] Позже выбор сюжета (включая скачанные) приходит из манифеста
@@ -25,6 +28,8 @@ fun featureModule() = module {
     single { StoryRules.load(get()) }
     single { ClassCatalog.load(get()) }
     single { GameStateRepository(androidContext(), get(), get(), get(), get(), defaultName = "Кейн") }
+    // One logging session per app launch. Best-effort; no-op until Firebase is set up.
+    single<TurnLogger> { FirebaseTurnLogger(sessionId = UUID.randomUUID().toString()) }
     single<LlmEngine> {
         val game = get<GameStateRepository>()
         val catalog = get<WorldCatalog>()
@@ -35,6 +40,7 @@ fun featureModule() = module {
             systemPromptProvider = {
                 loader.buildSystemPrompt(game.state.value, game.journal(), catalog)
             },
+            logger = get(),
         )
     }
 }
