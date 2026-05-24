@@ -13,7 +13,6 @@ data class TurnLog(
     val model: String,
     val systemPrompt: String,
     val userPrompt: String,
-    val history: List<LlmMessage>,
     val response: String,
     val promptTokens: Int?,
     val completionTokens: Int?,

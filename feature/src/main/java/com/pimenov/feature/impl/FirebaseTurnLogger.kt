@@ -25,9 +25,6 @@ class FirebaseTurnLogger(private val sessionId: String) : TurnLogger {
             "model" to entry.model,
             "system_prompt" to entry.systemPrompt,
             "user_prompt" to entry.userPrompt,
-            "history" to entry.history.map {
-                mapOf("role" to it.role.name, "content" to it.content)
-            },
             "response" to entry.response,
             "prompt_tokens" to entry.promptTokens,
             "completion_tokens" to entry.completionTokens,

@@ -123,15 +123,14 @@ class DeepSeekLlmEngine(
                     emit(delta)
                 }
             }
-            logTurn(systemPrompt, userPrompt, history, full.toString(), usage)
+            logTurn(systemPrompt, userPrompt, full.toString(), usage)
         }
     }
 
-    /** Best-effort: record the full request/response and token budget. */
+    /** Best-effort: record this turn's request/response and token budget. */
     private fun logTurn(
         systemPrompt: String,
         userPrompt: String,
-        history: List<LlmMessage>,
         response: String,
         usage: StreamChunk.Usage?,
     ) {
@@ -141,7 +140,6 @@ class DeepSeekLlmEngine(
                     model = model,
                     systemPrompt = systemPrompt,
                     userPrompt = userPrompt,
-                    history = history,
                     response = response,
                     promptTokens = usage?.promptTokens,
                     completionTokens = usage?.completionTokens,

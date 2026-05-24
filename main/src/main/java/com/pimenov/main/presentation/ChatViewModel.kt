@@ -160,11 +160,7 @@ class ChatViewModel(
             )
         }
 
-        val history = _state.value.messages
-            .dropLast(2)
-            .map { LlmMessage(it.role, it.text) }
-
-        streamAssistant(prompt = trimmed, history = history, targetId = dmMsg.id, playerTurn = true)
+        streamAssistant(prompt = trimmed, history = recentHistory(), targetId = dmMsg.id, playerTurn = true)
     }
 
     /**
@@ -180,7 +176,7 @@ class ChatViewModel(
         _state.update {
             it.copy(messages = it.messages + userMsg + dmMsg, isSending = true, error = null, currentOptions = emptyList())
         }
-        val history = _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
+        val history = recentHistory()
         // playerTurn = false: a thought never triggers quests, travel or combat.
         streamAssistant(prompt = reflectionPrompt(trimmed), history = history, targetId = dmMsg.id, playerTurn = false)
     }
@@ -354,7 +350,7 @@ class ChatViewModel(
         val hidden = ChatMessage(nextId++, LlmMessage.Role.USER, resultText, hidden = true)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
         _state.update { it.copy(messages = it.messages + hidden + dmMsg) }
-        val history = _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
+        val history = recentHistory()
         val raw = streamOnce(resultText, history, dmMsg.id, live = true)
         _state.update { st ->
             st.copy(messages = st.messages.map { m -> if (m.id == dmMsg.id) m.copy(isStreaming = false) else m })
@@ -389,6 +385,10 @@ class ChatViewModel(
         val options = parseOptions(raw)
         _state.update { it.copy(isSending = false, currentOptions = options.ifEmpty { COMBAT_FALLBACK_OPTIONS }) }
     }
+
+    /** Conversation history sent to the model: everything except the two just-added bubbles. */
+    private fun recentHistory(): List<LlmMessage> =
+        _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
 
     /** Heuristic: does the player's combat line mean "use healing supplies"? */
     private fun wantsHeal(text: String): Boolean =
@@ -446,7 +446,7 @@ class ChatViewModel(
         val hidden = ChatMessage(nextId++, LlmMessage.Role.USER, resultText, hidden = true)
         val dmMsg = ChatMessage(nextId++, LlmMessage.Role.ASSISTANT, "", isStreaming = true)
         _state.update { it.copy(messages = it.messages + hidden + dmMsg) }
-        val history = _state.value.messages.dropLast(2).map { LlmMessage(it.role, it.text) }
+        val history = recentHistory()
         streamAssistant(prompt = resultText, history = history, targetId = dmMsg.id, playerTurn = false)
     }
 
