@@ -208,6 +208,21 @@ body {
   display: none;
 }
 
+.charbar__new {
+  background: transparent;
+  border: 1px solid var(--color-surface);
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.charbar__new:hover {
+  color: var(--color-text);
+  border-color: var(--color-ember);
+}
+
 .hpbar {
   flex: 1;
   height: 8px;

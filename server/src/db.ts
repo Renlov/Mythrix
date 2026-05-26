@@ -168,6 +168,15 @@ export async function savePlayer(env: Env, p: PlayerState): Promise<void> {
     .run();
 }
 
+// Полная очистка прогресса игрока (для «новой игры»): ходы, память локаций, квесты.
+export async function clearPlayerProgress(env: Env, uid: string): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM turns WHERE telegram_user_id=?").bind(uid),
+    env.DB.prepare("DELETE FROM location_memory WHERE telegram_user_id=?").bind(uid),
+    env.DB.prepare("DELETE FROM player_quests WHERE telegram_user_id=?").bind(uid),
+  ]);
+}
+
 export async function getQuestProgress(env: Env, uid: string): Promise<QuestProgress[]> {
   const res = await env.DB.prepare(
     "SELECT quest_id, status, stage FROM player_quests WHERE telegram_user_id=?",

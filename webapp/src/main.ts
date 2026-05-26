@@ -43,6 +43,18 @@ function showError(msg: string): void {
   setTimeout(() => toast.remove(), 4000);
 }
 
+// Подтверждение действия: нативный диалог Telegram, иначе window.confirm.
+function confirmAction(message: string, onYes: () => void): void {
+  const tgConfirm = window.Telegram?.WebApp?.showConfirm;
+  if (tgConfirm) {
+    tgConfirm(message, (ok) => {
+      if (ok) onYes();
+    });
+  } else if (window.confirm(message)) {
+    onYes();
+  }
+}
+
 // ---------- Экран выбора класса ----------
 
 async function renderClassSelect(): Promise<void> {
@@ -174,6 +186,19 @@ function renderBar(): void {
       { class: "charbar__ctx", title: "Токенов контекста на последнем ходу" },
       contextUsage ? `${contextUsage} ток.` : "",
     ),
+    (() => {
+      const btn = el(
+        "button",
+        { class: "charbar__new", type: "button", title: "Начать новую игру" },
+        "Новая игра",
+      );
+      btn.addEventListener("click", () =>
+        confirmAction("Начать заново? Текущий прогресс будет потерян.", () => {
+          void renderClassSelect();
+        }),
+      );
+      return btn;
+    })(),
   );
 }
 

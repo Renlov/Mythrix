@@ -117,6 +117,8 @@ async function newGame(env: Env, uid: string, body: Record<string, unknown>): Pr
     combat_session: null,
     game_over: false,
   };
+  // Новая игра затирает прежний прогресс (ходы, память локаций, квесты).
+  await db.clearPlayerProgress(env, uid);
   await db.savePlayer(env, player);
 
   // Стартовый прогресс квестов из их определений.
