@@ -1,0 +1,26 @@
+name = "mythrix"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+
+# D1 — создать через `wrangler d1 create mythrix`, вставить database_id ниже.
+[[d1_databases]]
+binding = "DB"
+database_name = "mythrix"
+database_id = "0ff03597-7643-43b8-a9f8-6f03942b2996"
+
+# Секреты задаются НЕ здесь, а через wrangler (не коммитятся):
+#   wrangler secret put DEEPSEEK_API_KEY
+#   wrangler secret put TELEGRAM_BOT_TOKEN
+# Локально — через server/.dev.vars (в .gitignore).
+
+# Бандлим .txt (системный промпт) как текстовый модуль.
+[[rules]]
+type = "Text"
+globs = ["**/*.txt"]
+fallthrough = true
+
+[vars]
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_MODEL = "deepseek-chat"
+WORLD_ID = "tavern"
+RULESET_ID = "dnd_v1"

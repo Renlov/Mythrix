@@ -1,0 +1,11 @@
+{
+  "id": "dnd_v1",
+  "name": "Mythrix DnD v1",
+  "combat_config": {
+    "player_base_ac": 10,
+    "unarmed_die": "d2",
+    "attack_formula": "d20 + attack_bonus >= target_ac",
+    "skill_difficulty": { "easy": 8, "medium": 12, "hard": 16 },
+    "allowed_dice_pattern": "^([0-9]*)d([0-9]+)([+-][0-9]+)?$"
+  }
+}

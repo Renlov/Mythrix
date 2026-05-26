@@ -1,0 +1,374 @@
+:root {
+  --color-bg: oklch(16% 0.012 60);
+  --color-bg-soft: oklch(21% 0.016 55);
+  --color-surface: oklch(25% 0.02 50);
+  --color-text: oklch(88% 0.02 70);
+  --color-muted: oklch(64% 0.02 70);
+  --color-ember: oklch(70% 0.16 55);
+  --color-ember-dim: oklch(48% 0.1 50);
+  --color-blood: oklch(48% 0.16 25);
+
+  --font-serif: "Georgia", "Times New Roman", serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --space: clamp(0.75rem, 0.5rem + 1vw, 1.25rem);
+  --radius: 10px;
+  --duration: 280ms;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--color-bg-soft), var(--color-bg) 70%) fixed;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ---------- Старт ---------- */
+
+.screen--start {
+  justify-content: center;
+  gap: var(--space);
+  padding: var(--space);
+  text-align: center;
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: clamp(2.5rem, 1rem + 9vw, 4.5rem);
+  letter-spacing: 0.04em;
+  color: var(--color-ember);
+  text-shadow: 0 0 28px oklch(60% 0.16 55 / 0.35);
+}
+
+.subtitle {
+  color: var(--color-muted);
+  font-style: italic;
+  margin-bottom: var(--space);
+}
+
+.field {
+  width: 100%;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-surface);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  padding: 0.75rem 1rem;
+  font: inherit;
+  resize: none;
+}
+
+.field:focus-visible {
+  outline: none;
+  border-color: var(--color-ember-dim);
+  box-shadow: 0 0 0 2px oklch(60% 0.16 55 / 0.18);
+}
+
+.classes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+}
+
+.class-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  text-align: left;
+  padding: 0.85rem;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-surface);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.class-card:hover {
+  transform: translateY(-2px);
+}
+
+.class-card.is-selected {
+  border-color: var(--color-ember);
+  box-shadow: 0 0 0 1px var(--color-ember) inset;
+}
+
+.class-name {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  color: var(--color-ember);
+}
+
+.class-desc {
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+/* ---------- Кнопки ---------- */
+
+.btn {
+  font: inherit;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background var(--duration) var(--ease),
+    opacity var(--duration) var(--ease);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--primary {
+  background: var(--color-ember);
+  color: oklch(18% 0.02 50);
+  font-weight: 600;
+  padding: 0.85rem 1.5rem;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--color-ember-dim);
+  color: var(--color-ember);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.btn--send {
+  background: var(--color-ember);
+  color: oklch(18% 0.02 50);
+  font-size: 1.3rem;
+  width: 3rem;
+  flex: none;
+}
+
+/* ---------- Игра ---------- */
+
+.screen--play {
+  padding: 0;
+}
+
+.charbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem var(--space);
+  background: oklch(18% 0.014 55 / 0.9);
+  border-bottom: 1px solid var(--color-surface);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.charbar__name {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+}
+
+.charbar__gold {
+  margin-left: auto;
+  color: var(--color-ember);
+  font-size: 0.85rem;
+}
+
+.hpbar {
+  flex: 1;
+  height: 8px;
+  background: var(--color-surface);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.hpbar__fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-blood), var(--color-ember));
+  transition: width var(--duration) var(--ease);
+}
+
+.log {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  scroll-behavior: smooth;
+}
+
+.bubble {
+  max-width: 90%;
+  padding: 0.7rem 0.95rem;
+  border-radius: var(--radius);
+  animation: rise var(--duration) var(--ease);
+}
+
+.bubble p + p {
+  margin-top: 0.5rem;
+}
+
+.bubble--dm {
+  align-self: flex-start;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-surface);
+  font-family: var(--font-serif);
+  line-height: 1.6;
+}
+
+.bubble--player {
+  align-self: flex-end;
+  background: var(--color-ember-dim);
+  color: oklch(94% 0.02 70);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.inventory {
+  padding: 0 var(--space);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.inventory__title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-muted);
+  margin-bottom: 0.2rem;
+}
+
+.inv-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--color-bg-soft);
+  border-radius: 8px;
+}
+
+.inv-row.is-equipped {
+  border-left: 3px solid var(--color-ember);
+}
+
+.inv-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.inv-name {
+  font-size: 0.9rem;
+}
+
+.inv-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.inv-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+  padding: var(--space);
+  border-top: 1px solid var(--color-surface);
+  background: oklch(18% 0.014 55 / 0.9);
+  position: sticky;
+  bottom: 0;
+}
+
+.composer__input {
+  max-height: 6rem;
+}
+
+/* ---------- Поражение / тосты ---------- */
+
+.defeat {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space);
+  background: oklch(10% 0.02 30 / 0.92);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  animation: fade var(--duration) var(--ease);
+}
+
+.defeat__text {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  color: var(--color-blood);
+  text-align: center;
+  padding: 0 var(--space);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  background: var(--color-blood);
+  color: oklch(95% 0.02 70);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  z-index: 20;
+  animation: fade var(--duration) var(--ease);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

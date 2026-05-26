@@ -1,0 +1,3 @@
+# Локальные секреты для `wrangler dev`. Скопировать в .dev.vars (в .gitignore).
+DEEPSEEK_API_KEY="sk-..."
+TELEGRAM_BOT_TOKEN="123456:ABC-..."
