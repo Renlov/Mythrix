@@ -209,10 +209,11 @@ export async function appendTurn(
   narrative: string,
   events: unknown,
   contextUsage: number,
+  locationId: string,
 ): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO turns (telegram_user_id, turn_index, ts, player_action, narrative, events, context_usage)
-     VALUES (?,?,?,?,?,?,?)`,
+    `INSERT INTO turns (telegram_user_id, turn_index, ts, player_action, narrative, events, context_usage, location_id)
+     VALUES (?,?,?,?,?,?,?,?)`,
   )
     .bind(
       uid,
@@ -222,6 +223,91 @@ export async function appendTurn(
       narrative,
       JSON.stringify(events),
       contextUsage,
+      locationId,
     )
+    .run();
+}
+
+export interface TurnRow {
+  turn_index: number;
+  player_action: string;
+  narrative: string;
+}
+
+// Последние ходы в конкретной локации (для журнала текущей сцены), в хронологическом порядке.
+export async function getLocationTurns(
+  env: Env,
+  uid: string,
+  locationId: string,
+  limit: number,
+): Promise<TurnRow[]> {
+  const res = await env.DB.prepare(
+    `SELECT turn_index, player_action, narrative FROM turns
+     WHERE telegram_user_id=? AND location_id=? ORDER BY turn_index DESC LIMIT ?`,
+  )
+    .bind(uid, locationId, limit)
+    .all<TurnRow>();
+  return res.results.reverse();
+}
+
+// Последние ходы в локации с turn_index строго больше since (что ещё не вошло в summary).
+export async function getLocationTurnsSince(
+  env: Env,
+  uid: string,
+  locationId: string,
+  since: number,
+): Promise<TurnRow[]> {
+  const res = await env.DB.prepare(
+    `SELECT turn_index, player_action, narrative FROM turns
+     WHERE telegram_user_id=? AND location_id=? AND turn_index>? ORDER BY turn_index ASC`,
+  )
+    .bind(uid, locationId, since)
+    .all<TurnRow>();
+  return res.results;
+}
+
+// Последние ходы независимо от локации (лид-ин при первом входе в новую локацию).
+export async function getRecentTurns(env: Env, uid: string, limit: number): Promise<TurnRow[]> {
+  const res = await env.DB.prepare(
+    `SELECT turn_index, player_action, narrative FROM turns
+     WHERE telegram_user_id=? ORDER BY turn_index DESC LIMIT ?`,
+  )
+    .bind(uid, limit)
+    .all<TurnRow>();
+  return res.results.reverse();
+}
+
+export interface LocationMemory {
+  summary: string;
+  last_turn_index: number;
+}
+
+export async function getLocationMemory(
+  env: Env,
+  uid: string,
+  locationId: string,
+): Promise<LocationMemory | null> {
+  const row = await env.DB.prepare(
+    "SELECT summary, last_turn_index FROM location_memory WHERE telegram_user_id=? AND location_id=?",
+  )
+    .bind(uid, locationId)
+    .first<LocationMemory>();
+  return row ?? null;
+}
+
+export async function saveLocationMemory(
+  env: Env,
+  uid: string,
+  locationId: string,
+  summary: string,
+  lastTurnIndex: number,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO location_memory (telegram_user_id, location_id, summary, last_turn_index, updated_at)
+     VALUES (?,?,?,?,?)
+     ON CONFLICT(telegram_user_id, location_id) DO UPDATE SET
+       summary=excluded.summary, last_turn_index=excluded.last_turn_index, updated_at=excluded.updated_at`,
+  )
+    .bind(uid, locationId, summary, lastTurnIndex, Date.now())
     .run();
 }

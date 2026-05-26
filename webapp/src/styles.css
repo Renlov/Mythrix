@@ -198,6 +198,16 @@ body {
   font-size: 0.85rem;
 }
 
+.charbar__ctx {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.charbar__ctx:empty {
+  display: none;
+}
+
 .hpbar {
   flex: 1;
   height: 8px;

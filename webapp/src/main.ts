@@ -17,6 +17,7 @@ const root = document.getElementById("app")!;
 type LogEntry = { who: "player" | "dm"; text: string };
 const log: LogEntry[] = [];
 let player: PlayerView | null = null;
+let contextUsage = 0; // токены контекста последнего хода
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -168,6 +169,11 @@ function renderBar(): void {
       return hp;
     })(),
     el("span", { class: "charbar__gold" }, `${player.gold} зол.`),
+    el(
+      "span",
+      { class: "charbar__ctx", title: "Токенов контекста на последнем ходу" },
+      contextUsage ? `${contextUsage} ток.` : "",
+    ),
   );
 }
 
@@ -268,6 +274,7 @@ async function firstTurn(): Promise<void> {
     const res = await sendTurn("Я оглядываюсь по сторонам.");
     logEl.lastElementChild?.remove();
     player = res.player;
+    contextUsage = res.context_usage;
     pushDm(res.narrative, res.game_over);
   } catch (e) {
     logEl.lastElementChild?.remove();
@@ -290,6 +297,7 @@ async function submitAction(): Promise<void> {
     const res = await sendTurn(action);
     logEl.lastElementChild?.remove();
     player = res.player;
+    contextUsage = res.context_usage;
     pushDm(res.narrative, res.game_over);
   } catch (e) {
     logEl.lastElementChild?.remove();

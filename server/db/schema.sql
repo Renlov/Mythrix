@@ -124,5 +124,20 @@ CREATE TABLE IF NOT EXISTS turns (
   narrative        TEXT,
   events           TEXT,
   context_usage    INTEGER,
+  location_id      TEXT,                         -- где закончился ход (для журнала по локации)
   PRIMARY KEY (telegram_user_id, turn_index)
+);
+CREATE INDEX IF NOT EXISTS idx_turns_loc ON turns(telegram_user_id, location_id, turn_index);
+
+----------------------------------------------------------------------
+-- Память локаций: сжатый итог визитов (саммари по границе сцены, см. docs/03).
+----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS location_memory (
+  telegram_user_id TEXT NOT NULL,
+  location_id      TEXT NOT NULL,
+  summary          TEXT NOT NULL,
+  last_turn_index  INTEGER NOT NULL DEFAULT -1,  -- последний ход, уже вошедший в summary
+  updated_at       INTEGER NOT NULL,
+  PRIMARY KEY (telegram_user_id, location_id)
 );

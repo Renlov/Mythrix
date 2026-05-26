@@ -8,6 +8,7 @@ import { applyEvents } from "./apply.js";
 import { resolveAttackIntent, resolveUseItemIntent } from "./combatFlow.js";
 import { equipItem, unequipSlot, type EquipSlot } from "./equip.js";
 import { useItem, removeFromInventory } from "./inventory.js";
+import { summarizeOnExit } from "./memory.js";
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -133,6 +134,7 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
   let player = await db.getPlayer(env, uid);
   if (!player) return json({ error: "no game — call /new-game first" }, 409);
   if (player.game_over) return json({ error: "game over — call /new-game", game_over: true }, 409);
+  const startLocation = player.location_id;
 
   const system = buildSystemPrompt(player.name);
   const sceneContext = await buildSceneContext(env, player);
@@ -211,9 +213,15 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
   const applied = await applyEvents(env, player, restEvents);
   player = applied.player;
 
+  // Граница сцены: игрок сменил локацию → сжимаем покинутую в память локации.
+  if (player.location_id !== startLocation) {
+    const leftLoc = await db.getLocation(env, startLocation);
+    usageTokens += await summarizeOnExit(env, uid, startLocation, leftLoc?.name ?? startLocation);
+  }
+
   await db.savePlayer(env, player);
   const turnIndex = await db.nextTurnIndex(env, uid);
-  await db.appendTurn(env, uid, turnIndex, action, narrative, events, usageTokens);
+  await db.appendTurn(env, uid, turnIndex, action, narrative, events, usageTokens, player.location_id);
 
   return json({
     narrative,

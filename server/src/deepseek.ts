@@ -11,7 +11,11 @@ export interface ChatResult {
 }
 
 // Вызов DeepSeek (OpenAI-совместимый /chat/completions). Не стриминг.
-export async function chat(env: Env, messages: ChatMessage[]): Promise<ChatResult> {
+export async function chat(
+  env: Env,
+  messages: ChatMessage[],
+  opts: { temperature?: number } = {},
+): Promise<ChatResult> {
   const res = await fetch(`${env.DEEPSEEK_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -21,7 +25,7 @@ export async function chat(env: Env, messages: ChatMessage[]): Promise<ChatResul
     body: JSON.stringify({
       model: env.DEEPSEEK_MODEL,
       messages,
-      temperature: 0.8,
+      temperature: opts.temperature ?? 0.8,
       stream: false,
     }),
   });

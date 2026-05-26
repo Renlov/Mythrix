@@ -2,6 +2,9 @@ import systemPromptTemplate from "../world/prompts/dm_system_v1.txt";
 import type { Env, PlayerState, Npc, Item } from "./types.js";
 import * as db from "./db.js";
 
+// Сколько последних ходов локации держим дословно в журнале (скользящее окно сцены).
+const LOCATION_JOURNAL_TURNS = 25;
+
 export function buildSystemPrompt(playerName: string): string {
   return systemPromptTemplate.replaceAll("{{player_name}}", playerName);
 }
@@ -103,17 +106,23 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
     );
   }
 
-  // [ЖУРНАЛ] — последние ходы
-  const recent = await env.DB.prepare(
-    "SELECT player_action, narrative FROM turns WHERE telegram_user_id=? ORDER BY turn_index DESC LIMIT 6",
-  )
-    .bind(player.telegram_user_id)
-    .all<{ player_action: string; narrative: string }>();
-  if (recent.results.length) {
-    const lines = recent.results
-      .reverse()
-      .map((t) => `Игрок: ${t.player_action}\nDM: ${t.narrative}`)
-      .join("\n");
+  // [ПАМЯТЬ ЛОКАЦИИ] — сжатый итог прошлых визитов в текущую локацию (см. docs/03).
+  const mem = await db.getLocationMemory(env, player.telegram_user_id, player.location_id);
+  if (mem?.summary) blocks.push(`[ПАМЯТЬ ЛОКАЦИИ]\n${mem.summary}`);
+
+  // [ЖУРНАЛ] — последние ходы ТЕКУЩЕЙ локации (скользящее окно сцены).
+  // При первом входе в локацию журнал пуст — берём 2 последних хода как лид-ин перехода.
+  let journal = await db.getLocationTurns(
+    env,
+    player.telegram_user_id,
+    player.location_id,
+    LOCATION_JOURNAL_TURNS,
+  );
+  if (journal.length === 0) {
+    journal = await db.getRecentTurns(env, player.telegram_user_id, 2);
+  }
+  if (journal.length) {
+    const lines = journal.map((t) => `Игрок: ${t.player_action}\nDM: ${t.narrative}`).join("\n");
     blocks.push(`[ЖУРНАЛ]\n${lines}`);
   }
 
