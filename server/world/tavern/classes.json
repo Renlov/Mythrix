@@ -8,7 +8,7 @@
     "attack_bonus": 2,
     "skill_bonus": 3,
     "base_ac": 10,
-    "starting_items": []
+    "starting_items": ["item_traveler_dagger", "item_rags"]
   },
   {
     "id": "warrior",
@@ -19,7 +19,7 @@
     "attack_bonus": 3,
     "skill_bonus": 1,
     "base_ac": 11,
-    "starting_items": []
+    "starting_items": ["item_traveler_dagger", "item_rags"]
   },
   {
     "id": "rogue",
@@ -30,7 +30,7 @@
     "attack_bonus": 2,
     "skill_bonus": 4,
     "base_ac": 10,
-    "starting_items": []
+    "starting_items": ["item_traveler_dagger", "item_rags"]
   },
   {
     "id": "mage",
@@ -41,6 +41,6 @@
     "attack_bonus": 4,
     "skill_bonus": 2,
     "base_ac": 9,
-    "starting_items": []
+    "starting_items": ["item_traveler_dagger", "item_rags"]
   }
 ]
