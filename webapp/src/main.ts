@@ -18,6 +18,7 @@ const log: LogEntry[] = [];
 let player: PlayerView | null = null;
 let contextUsage = 0; // токены контекста последнего хода
 let refreshSheet: (() => void) | null = null; // перерисовка открытого инвентаря, если открыт
+let invPage = 0; // активная страница пейджера инвентаря
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -247,22 +248,47 @@ function openOverlay(panel: HTMLElement, onClose?: () => void): () => void {
   return close;
 }
 
-// Инвентарь — выезжающий снизу bottom sheet.
+// Инвентарь — bottom sheet с горизонтальным пейджером по разделам (свайп/табы).
 function openInventory(): void {
-  const body = el("div", { class: "sheet__body" });
-  const fill = (): void => {
-    body.replaceChildren();
-    if (!player || player.inventory_items.length === 0) {
-      body.append(el("p", { class: "sheet__empty" }, "Снаряжения нет."));
-      return;
-    }
-    for (const cat of CATEGORIES) {
-      const items = player.inventory_items.filter((it) => it.type === cat.type);
-      if (items.length === 0) continue;
-      body.append(el("h3", { class: "sheet__section" }, cat.title));
-      for (const it of items) body.append(renderInvRow(it));
-    }
+  invPage = 0;
+  const tabsEl = el("div", { class: "sheet__tabs" });
+  const pager = el("div", { class: "sheet__pager" });
+
+  const setActive = (idx: number): void => {
+    invPage = idx;
+    Array.from(tabsEl.children).forEach((t, i) =>
+      (t as HTMLElement).classList.toggle("is-active", i === idx),
+    );
   };
+
+  const fill = (): void => {
+    tabsEl.replaceChildren();
+    pager.replaceChildren();
+    CATEGORIES.forEach((cat, idx) => {
+      const tab = el("button", { class: "sheet__tab", type: "button" }, cat.title);
+      tab.addEventListener("click", () => {
+        pager.scrollTo({ left: pager.clientWidth * idx, behavior: "smooth" });
+        setActive(idx);
+      });
+      tabsEl.append(tab);
+
+      const page = el("div", { class: "sheet__page" });
+      const items = player ? player.inventory_items.filter((it) => it.type === cat.type) : [];
+      if (items.length === 0) page.append(el("p", { class: "sheet__empty" }, "Пусто."));
+      else for (const it of items) page.append(renderInvRow(it));
+      pager.append(page);
+    });
+    setActive(Math.min(invPage, CATEGORIES.length - 1));
+    requestAnimationFrame(() => {
+      pager.scrollLeft = pager.clientWidth * invPage;
+    });
+  };
+
+  pager.addEventListener("scroll", () => {
+    const idx = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+    if (idx !== invPage) setActive(idx);
+  });
+
   fill();
   refreshSheet = fill;
 
@@ -276,7 +302,8 @@ function openInventory(): void {
       el("h2", { class: "sheet__title" }, "Снаряжение"),
       el("span", { class: "sheet__gold" }, player ? `${player.gold} зол.` : ""),
     ),
-    body,
+    tabsEl,
+    pager,
   );
   openOverlay(panel, () => {
     refreshSheet = null;

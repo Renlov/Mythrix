@@ -379,11 +379,62 @@ body {
   font-size: 0.85rem;
 }
 
-.sheet__body {
+.sheet__tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sheet__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.sheet__tab {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  background: transparent;
+  border: 1px solid var(--color-surface);
+  border-radius: 99px;
+  padding: 0.3rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.sheet__tab.is-active {
+  color: var(--color-ember);
+  border-color: var(--color-ember);
+}
+
+.sheet__pager {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sheet__pager::-webkit-scrollbar {
+  display: none;
+}
+
+.sheet__page {
+  flex: 0 0 100%;
+  width: 100%;
+  scroll-snap-align: start;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  padding: 0.15rem;
 }
 
 .sheet__empty {
@@ -434,18 +485,6 @@ body {
   gap: 0.5rem;
 }
 
-.sheet__section {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--color-muted);
-  margin-top: 0.4rem;
-}
-
-.sheet__section:first-child {
-  margin-top: 0;
-}
-
 .inv-row {
   display: flex;
   align-items: center;
@@ -453,7 +492,7 @@ body {
   width: 100%;
   text-align: left;
   font: inherit;
-  color: var(--color-text);
+  color: var(--color-muted);
   padding: 0.6rem 0.75rem;
   background: var(--color-bg);
   border: 1px solid var(--color-surface);
@@ -461,19 +500,25 @@ body {
   cursor: pointer;
   transition:
     border-color var(--duration) var(--ease),
-    background var(--duration) var(--ease);
+    background var(--duration) var(--ease),
+    color var(--duration) var(--ease);
 }
 
-.inv-row:hover {
-  border-color: var(--color-ember-dim);
+@media (hover: hover) {
+  .inv-row:not(.is-static):hover {
+    border-color: var(--color-ember-dim);
+  }
 }
 
 .inv-row.is-static {
   cursor: default;
 }
 
+/* Надето — выделено: ember-рамка, лёгкая подложка, яркий текст. Снято — приглушено. */
 .inv-row.is-equipped {
+  color: var(--color-text);
   border-color: var(--color-ember);
+  background: oklch(70% 0.16 55 / 0.14);
   box-shadow: 0 0 0 1px var(--color-ember) inset;
 }
 
@@ -495,8 +540,10 @@ body {
 }
 
 .inv-chip.is-on {
-  color: var(--color-ember);
-  border-color: var(--color-ember-dim);
+  color: oklch(18% 0.02 50);
+  background: var(--color-ember);
+  border-color: var(--color-ember);
+  font-weight: 700;
 }
 
 .composer {
