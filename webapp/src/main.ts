@@ -7,7 +7,6 @@ import {
   equip,
   unequip,
   useItem,
-  dropItem,
   type ClassInfo,
   type PlayerView,
 } from "./api.js";
@@ -176,20 +175,48 @@ function renderBar(): void {
       hp.append(el("span", { class: "hpbar__fill", style: `width:${pct}%` }));
       return hp;
     })(),
-    el("span", { class: "charbar__gold" }, `${player.gold} зол.`),
     el(
       "span",
       { class: "charbar__ctx", title: "Токенов контекста на последнем ходу" },
       contextUsage ? `${contextUsage} ток.` : "",
     ),
-    iconBtn("🎒", "Инвентарь", openInventory, player.inventory_items.length),
-    iconBtn("⚙", "Настройки", openSettings),
+    iconBtn(
+      svgIcon("M9 9V6.5A3 3 0 0 1 15 6.5V9", "M5 9H19L20 17A3 3 0 0 1 17 20H7A3 3 0 0 1 4 17Z"),
+      "Снаряжение",
+      openInventory,
+      player.inventory_items.length,
+    ),
+    iconBtn(
+      svgIcon("M21 4H14", "M10 4H3", "M21 12H12", "M8 12H3", "M21 20H16", "M12 20H3", "M14 2v4", "M8 10v4", "M16 18v4"),
+      "Настройки",
+      openSettings,
+    ),
   );
+}
+
+// Иконка-SVG со штриховым контуром (currentColor) — в тон тёмному оформлению.
+function svgIcon(...paths: string[]): SVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const s = document.createElementNS(ns, "svg");
+  s.setAttribute("viewBox", "0 0 24 24");
+  s.setAttribute("width", "18");
+  s.setAttribute("height", "18");
+  s.setAttribute("fill", "none");
+  s.setAttribute("stroke", "currentColor");
+  s.setAttribute("stroke-width", "1.6");
+  s.setAttribute("stroke-linecap", "round");
+  s.setAttribute("stroke-linejoin", "round");
+  for (const d of paths) {
+    const p = document.createElementNS(ns, "path");
+    p.setAttribute("d", d);
+    s.appendChild(p);
+  }
+  return s;
 }
 
 // Иконочная кнопка в charbar; badge — необязательный счётчик (например, число предметов).
 function iconBtn(
-  icon: string,
+  icon: Node,
   title: string,
   onClick: () => void,
   badge?: number,
@@ -226,22 +253,27 @@ function openInventory(): void {
   const fill = (): void => {
     body.replaceChildren();
     if (!player || player.inventory_items.length === 0) {
-      body.append(el("p", { class: "sheet__empty" }, "Инвентарь пуст."));
+      body.append(el("p", { class: "sheet__empty" }, "Снаряжения нет."));
       return;
     }
-    for (const it of player.inventory_items) body.append(renderInvRow(it));
+    for (const cat of CATEGORIES) {
+      const items = player.inventory_items.filter((it) => it.type === cat.type);
+      if (items.length === 0) continue;
+      body.append(el("h3", { class: "sheet__section" }, cat.title));
+      for (const it of items) body.append(renderInvRow(it));
+    }
   };
   fill();
   refreshSheet = fill;
 
   const panel = el(
     "div",
-    { class: "sheet", role: "dialog", "aria-label": "Инвентарь" },
+    { class: "sheet", role: "dialog", "aria-label": "Снаряжение" },
     el("div", { class: "sheet__grip" }),
     el(
       "div",
       { class: "sheet__head" },
-      el("h2", { class: "sheet__title" }, "Инвентарь"),
+      el("h2", { class: "sheet__title" }, "Снаряжение"),
       el("span", { class: "sheet__gold" }, player ? `${player.gold} зол.` : ""),
     ),
     body,
@@ -289,50 +321,50 @@ async function invAction(
   }
 }
 
-function ghostBtn(label: string, run: (b: HTMLButtonElement) => Promise<void>): HTMLButtonElement {
-  const btn = el("button", { class: "btn btn--ghost", type: "button" }, label) as HTMLButtonElement;
-  btn.addEventListener("click", () => void run(btn));
-  return btn;
-}
+// Разделы снаряжения в порядке показа.
+const CATEGORIES: { type: string; title: string }[] = [
+  { type: "weapon", title: "Оружие" },
+  { type: "armor", title: "Броня" },
+  { type: "ring", title: "Кольца" },
+  { type: "consumable", title: "Расходники" },
+];
 
-const typeLabel: Record<string, string> = {
-  weapon: "оружие",
-  armor: "броня",
-  consumable: "расходник",
-};
-
+// Строка снаряжения = кликабельная: снаряжение снять/надеть по клику, расходник — использовать.
 function renderInvRow(it: PlayerView["inventory_items"][number]): HTMLElement {
   if (!player) throw new Error("no player");
-  const slot = it.type === "weapon" ? "weapon" : it.type === "armor" ? "armor" : null;
+  const slot =
+    it.type === "weapon" ? "weapon" : it.type === "armor" ? "armor" : null;
   const isEquipped =
     (slot === "weapon" && player.equipped.weapon === it.id) ||
     (slot === "armor" && player.equipped.armor === it.id);
+  const isConsumable = it.type === "consumable";
 
-  const meta = it.type === "consumable" && it.charges !== undefined ? ` · заряды: ${it.charges}` : "";
+  let chip: string;
+  if (isConsumable) chip = it.charges !== undefined ? `заряды: ${it.charges}` : "расходник";
+  else if (slot) chip = isEquipped ? "надето" : "снято";
+  else chip = "—";
+
   const row = el(
-    "div",
-    { class: "inv-row" + (isEquipped ? " is-equipped" : "") },
-    el(
-      "span",
-      { class: "inv-info" },
-      el("span", { class: "inv-name" }, it.name),
-      el("span", { class: "inv-tag" }, (typeLabel[it.type] ?? it.type) + meta),
-    ),
-  );
+    "button",
+    {
+      class:
+        "inv-row" +
+        (isEquipped ? " is-equipped" : "") +
+        (slot || isConsumable ? "" : " is-static"),
+      type: "button",
+      title: it.description ?? it.name,
+    },
+    el("span", { class: "inv-name" }, it.name),
+    el("span", { class: "inv-chip" + (isEquipped ? " is-on" : "") }, chip),
+  ) as HTMLButtonElement;
 
-  const actions = el("span", { class: "inv-actions" });
   if (slot) {
-    actions.append(
-      ghostBtn(isEquipped ? "Снять" : "Надеть", (b) =>
-        invAction(b, () => (isEquipped ? unequip(slot) : equip(it.id))),
-      ),
+    row.addEventListener("click", () =>
+      invAction(row, () => (isEquipped ? unequip(slot) : equip(it.id))),
     );
+  } else if (isConsumable) {
+    row.addEventListener("click", () => invAction(row, () => useItem(it.id)));
   }
-  if (it.type === "consumable") {
-    actions.append(ghostBtn("Использовать", (b) => invAction(b, () => useItem(it.id))));
-  }
-  actions.append(ghostBtn("Выбросить", (b) => invAction(b, () => dropItem(it.id))));
-  row.append(actions);
   return row;
 }
 

@@ -192,16 +192,14 @@ body {
   font-size: 0.95rem;
 }
 
-.charbar__gold {
-  margin-left: auto;
-  color: var(--color-ember);
-  font-size: 0.85rem;
-}
-
 .charbar__ctx {
   color: var(--color-muted);
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
+}
+
+.charbar__icon svg {
+  display: block;
 }
 
 .charbar__ctx:empty {
@@ -436,45 +434,69 @@ body {
   gap: 0.5rem;
 }
 
+.sheet__section {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-muted);
+  margin-top: 0.4rem;
+}
+
+.sheet__section:first-child {
+  margin-top: 0;
+}
+
 .inv-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.5rem 0.65rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--color-text);
+  padding: 0.6rem 0.75rem;
   background: var(--color-bg);
   border: 1px solid var(--color-surface);
   border-radius: 10px;
+  cursor: pointer;
+  transition:
+    border-color var(--duration) var(--ease),
+    background var(--duration) var(--ease);
+}
+
+.inv-row:hover {
+  border-color: var(--color-ember-dim);
+}
+
+.inv-row.is-static {
+  cursor: default;
 }
 
 .inv-row.is-equipped {
-  border-left: 3px solid var(--color-ember);
-}
-
-.inv-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
+  border-color: var(--color-ember);
+  box-shadow: 0 0 0 1px var(--color-ember) inset;
 }
 
 .inv-name {
-  font-size: 0.9rem;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.95rem;
 }
 
-.inv-tag {
+.inv-chip {
+  flex-shrink: 0;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-muted);
+  border: 1px solid var(--color-surface);
+  border-radius: 99px;
+  padding: 0.12rem 0.5rem;
 }
 
-.inv-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-left: auto;
+.inv-chip.is-on {
+  color: var(--color-ember);
+  border-color: var(--color-ember-dim);
 }
 
 .composer {

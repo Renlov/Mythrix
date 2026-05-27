@@ -98,6 +98,13 @@ async function newGame(env: Env, uid: string, body: Record<string, unknown>): Pr
   const hp = (cls.hp as number) ?? 10;
   const startItems = (cls.starting_items as string[]) ?? [];
 
+  // Стартовое снаряжение сразу надето (первое оружие и первая броня).
+  const startEquipped: { weapon?: string; armor?: string } = {};
+  for (const it of await db.getItems(env, startItems)) {
+    if (it.type === "weapon" && !startEquipped.weapon) startEquipped.weapon = it.id;
+    if (it.type === "armor" && !startEquipped.armor) startEquipped.armor = it.id;
+  }
+
   const player: PlayerState = {
     telegram_user_id: uid,
     world_id: env.WORLD_ID,
@@ -110,7 +117,7 @@ async function newGame(env: Env, uid: string, body: Record<string, unknown>): Pr
     location_id: STARTING_LOCATION,
     gold: 30,
     inventory: [...startItems],
-    equipped: {},
+    equipped: startEquipped,
     item_charges: {},
     known_npcs: [],
     status_effects: [],
