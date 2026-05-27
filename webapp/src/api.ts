@@ -70,13 +70,18 @@ export interface NewGameResponse {
   player: PlayerView;
 }
 
-export const newGame = (classId: string, name: string) =>
-  post<NewGameResponse>("/new-game", { class_id: classId, name });
+export const newGame = (classId: string, name: string, startLocation?: string) =>
+  post<NewGameResponse>("/new-game", {
+    class_id: classId,
+    name,
+    ...(startLocation ? { start_location: startLocation } : {}),
+  });
 
 export interface TurnResponse {
   narrative: string;
   player: PlayerView;
   game_over: boolean;
+  combat_over: boolean;
   warnings: string[];
   context_usage: number;
 }

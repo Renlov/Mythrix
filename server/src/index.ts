@@ -91,6 +91,12 @@ async function state(env: Env, uid: string): Promise<Response> {
 async function newGame(env: Env, uid: string, body: Record<string, unknown>): Promise<Response> {
   const classId = String(body.class_id ?? "wanderer");
   const name = String(body.name ?? "Путник").slice(0, 40);
+  // Точка старта зависит от выбранного пункта меню (сюжет/бой/таверна).
+  // Должна быть валидной локацией мира, иначе откатываемся к таверне.
+  const requestedStart = String(body.start_location ?? STARTING_LOCATION);
+  const startLocation = (await db.getLocation(env, requestedStart))
+    ? requestedStart
+    : STARTING_LOCATION;
 
   const cls = await db.getClass(env, classId);
   if (!cls) return json({ error: `unknown class: ${classId}` }, 400);
@@ -114,7 +120,7 @@ async function newGame(env: Env, uid: string, body: Record<string, unknown>): Pr
     level: 1,
     hp,
     max_hp: hp,
-    location_id: STARTING_LOCATION,
+    location_id: startLocation,
     gold: 30,
     inventory: [...startItems],
     equipped: startEquipped,
@@ -232,10 +238,15 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
   const turnIndex = await db.nextTurnIndex(env, uid);
   await db.appendTurn(env, uid, turnIndex, action, narrative, events, usageTokens, player.location_id);
 
+  // Бой завершён, если на этом ходу был разрешён боевой intent и сессия закрылась
+  // (враг повержен или игрок погиб). Клиент в режиме «Бой» по этому флагу выходит в меню.
+  const combatOver = handledCombatIntent !== null && player.combat_session === null;
+
   return json({
     narrative,
     player: await playerView(env, player),
     game_over: player.game_over,
+    combat_over: combatOver,
     warnings: applied.warnings,
     context_usage: usageTokens,
   });

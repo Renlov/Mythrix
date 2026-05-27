@@ -20,6 +20,46 @@ let contextUsage = 0; // токены контекста последнего х
 let refreshSheet: (() => void) | null = null; // перерисовка открытого инвентаря, если открыт
 let invPage = 0; // активная страница пейджера инвентаря
 
+// Режим сессии задаётся пунктом меню и меняет точку старта и поведение выхода.
+type Mode = "story" | "combat" | "tavern";
+let mode: Mode = "story";
+let pendingStart: string | undefined; // start_location для выбранного режима
+const MODE_KEY = "mythrix_mode";
+
+interface MenuEntry {
+  mode: Mode;
+  title: string;
+  desc: string;
+  cta: string;
+  start?: string; // undefined = серверный дефолт (таверна)
+  art: string; // css-класс плейсхолдера-картинки
+}
+
+const STORY: MenuEntry = {
+  mode: "story",
+  title: "Тень над Северным отрогом",
+  desc: "Три недели назад дракон сжёг деревню. Уцелевшие не выходят после темноты. Дорога на север ведёт к логову — и почти никто не возвращается.",
+  cta: "Войти в историю",
+  start: "loc_village_northspur",
+  art: "art--story",
+};
+const COMBAT: MenuEntry = {
+  mode: "combat",
+  title: "Бой",
+  desc: "Проверка боевой системы: схватка с врагом в северном лесу. Бой закончится — вернёшься в меню.",
+  cta: "В бой",
+  start: "loc_north_forest",
+  art: "art--combat",
+};
+const TAVERN: MenuEntry = {
+  mode: "tavern",
+  title: "Таверна «Последний привал»",
+  desc: "Последнее освещённое окно перед дорогой. Передохни у очага. Выйдешь за порог — история на этом закончится.",
+  cta: "Войти в таверну",
+  start: undefined,
+  art: "art--tavern",
+};
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -44,6 +84,13 @@ function showError(msg: string): void {
   setTimeout(() => toast.remove(), 4000);
 }
 
+// Нейтральное уведомление (не ошибка): например, «Бой окончен».
+function notice(msg: string): void {
+  const toast = el("div", { class: "toast toast--info" }, msg);
+  root.append(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
 // Подтверждение действия: нативный диалог Telegram, иначе window.confirm.
 function confirmAction(message: string, onYes: () => void): void {
   const tgConfirm = window.Telegram?.WebApp?.showConfirm;
@@ -56,14 +103,96 @@ function confirmAction(message: string, onYes: () => void): void {
   }
 }
 
+// ---------- Главное меню ----------
+
+interface ResumeInfo {
+  player: PlayerView;
+  lastNarrative: string | null;
+  gameOver: boolean;
+}
+
+async function renderMenu(resume: ResumeInfo | null = null): Promise<void> {
+  clear();
+  log.length = 0;
+  player = null;
+
+  const wrap = el("main", { class: "screen screen--menu" });
+  wrap.append(el("h1", { class: "title title--menu" }, "Mythrix"));
+
+  if (resume && !resume.gameOver) {
+    const cont = el(
+      "button",
+      { class: "btn btn--primary", type: "button" },
+      `Продолжить — ${resume.player.name}`,
+    );
+    cont.addEventListener("click", () => void resumePlay(resume));
+    wrap.append(cont);
+  }
+
+  wrap.append(el("h2", { class: "menu__heading" }, "Сюжеты"));
+  wrap.append(storyCard(STORY));
+
+  const tiles = el("div", { class: "menu__tiles" });
+  tiles.append(modeTile(COMBAT), modeTile(TAVERN));
+  wrap.append(tiles);
+
+  root.append(wrap);
+}
+
+function storyCard(entry: MenuEntry): HTMLElement {
+  const card = el(
+    "button",
+    { class: "story-card", type: "button" },
+    el("div", { class: `story-card__art ${entry.art}` }),
+    el(
+      "div",
+      { class: "story-card__body" },
+      el("h3", { class: "story-card__title" }, entry.title),
+      el("p", { class: "story-card__desc" }, entry.desc),
+    ),
+  );
+  card.addEventListener("click", () => startMode(entry));
+  return card;
+}
+
+function modeTile(entry: MenuEntry): HTMLElement {
+  const tile = el(
+    "button",
+    { class: `menu-tile ${entry.art}`, type: "button" },
+    el("span", { class: "menu-tile__title" }, entry.title),
+    el("span", { class: "menu-tile__desc" }, entry.desc),
+  );
+  tile.addEventListener("click", () => startMode(entry));
+  return tile;
+}
+
+function startMode(entry: MenuEntry): void {
+  mode = entry.mode;
+  pendingStart = entry.start;
+  void renderClassSelect(entry.cta);
+}
+
+async function resumePlay(resume: ResumeInfo): Promise<void> {
+  player = resume.player;
+  await renderPlay();
+  if (resume.lastNarrative) {
+    log.push({ who: "dm", text: resume.lastNarrative });
+    appendLog({ who: "dm", text: resume.lastNarrative });
+  }
+  if (resume.gameOver) renderDefeat();
+}
+
 // ---------- Экран выбора класса ----------
 
-async function renderClassSelect(): Promise<void> {
+async function renderClassSelect(cta = "Войти в таверну"): Promise<void> {
   clear();
   log.length = 0;
   player = null;
 
   const wrap = el("main", { class: "screen screen--start" });
+  const back = el("button", { class: "btn btn--ghost screen__back", type: "button" }, "← Меню");
+  back.addEventListener("click", () => void renderMenu());
+  wrap.append(back);
   wrap.append(el("h1", { class: "title" }, "Mythrix"));
   wrap.append(
     el("p", { class: "subtitle" }, "Последний привал. Дорога на север. Кто ты, путник?"),
@@ -103,20 +232,21 @@ async function renderClassSelect(): Promise<void> {
   }
   wrap.append(list);
 
-  const start = el("button", { class: "btn btn--primary", type: "button" }, "Войти в таверну");
+  const start = el("button", { class: "btn btn--primary", type: "button" }, cta);
   start.addEventListener("click", async () => {
     const name = nameInput.value.trim() || "Путник";
     start.setAttribute("disabled", "true");
     start.textContent = "…";
     try {
-      const res = await newGame(selected, name);
+      const res = await newGame(selected, name, pendingStart);
+      localStorage.setItem(MODE_KEY, mode);
       player = res.player;
       await renderPlay();
       await firstTurn();
     } catch (e) {
       showError((e as Error).message);
       start.removeAttribute("disabled");
-      start.textContent = "Войти в таверну";
+      start.textContent = cta;
     }
   });
   wrap.append(start);
@@ -169,13 +299,12 @@ async function renderPlay(): Promise<void> {
 function renderBar(): void {
   if (!player) return;
   const pct = Math.max(0, Math.round((player.hp / player.max_hp) * 100));
-  barEl.replaceChildren(
+  const hp = el("span", { class: "hpbar", title: `HP ${player.hp}/${player.max_hp}` });
+  hp.append(el("span", { class: "hpbar__fill", style: `width:${pct}%` }));
+
+  const parts: Node[] = [
     el("span", { class: "charbar__name" }, `${player.name} · ${player.class_id}`),
-    (() => {
-      const hp = el("span", { class: "hpbar", title: `HP ${player.hp}/${player.max_hp}` });
-      hp.append(el("span", { class: "hpbar__fill", style: `width:${pct}%` }));
-      return hp;
-    })(),
+    hp,
     el(
       "span",
       { class: "charbar__ctx", title: "Токенов контекста на последнем ходу" },
@@ -192,7 +321,20 @@ function renderBar(): void {
       "Настройки",
       openSettings,
     ),
-  );
+  ];
+
+  // В таверне доступен выход за порог — он завершает историю.
+  if (mode === "tavern") {
+    parts.push(
+      iconBtn(
+        svgIcon("M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "M16 17l5-5-5-5", "M21 12H9"),
+        "Выйти за порог",
+        exitTavern,
+      ),
+    );
+  }
+
+  barEl.replaceChildren(...parts);
 }
 
 // Иконка-SVG со штриховым контуром (currentColor) — в тон тёмному оформлению.
@@ -419,7 +561,7 @@ async function firstTurn(): Promise<void> {
     logEl.lastElementChild?.remove();
     player = res.player;
     contextUsage = res.context_usage;
-    pushDm(res.narrative, res.game_over);
+    pushDm(res.narrative, res.game_over, res.combat_over);
   } catch (e) {
     logEl.lastElementChild?.remove();
     showError((e as Error).message);
@@ -442,7 +584,7 @@ async function submitAction(): Promise<void> {
     logEl.lastElementChild?.remove();
     player = res.player;
     contextUsage = res.context_usage;
-    pushDm(res.narrative, res.game_over);
+    pushDm(res.narrative, res.game_over, res.combat_over);
   } catch (e) {
     logEl.lastElementChild?.remove();
     showError((e as Error).message);
@@ -451,12 +593,40 @@ async function submitAction(): Promise<void> {
   }
 }
 
-function pushDm(narrative: string, gameOver: boolean): void {
+function pushDm(narrative: string, gameOver: boolean, combatOver = false): void {
   log.push({ who: "dm", text: narrative });
   appendLog({ who: "dm", text: narrative });
   renderBar();
   refreshSheet?.();
-  if (gameOver) renderDefeat();
+  if (gameOver) {
+    renderDefeat();
+    return;
+  }
+  // Режим «Бой»: схватка завершена (враг повержен) — возврат в меню.
+  if (combatOver && mode === "combat") {
+    setBusy(true);
+    notice("Бой окончен — возврат в меню.");
+    setTimeout(() => void renderMenu(), 1400);
+  }
+}
+
+// Выход за порог таверны завершает историю.
+function exitTavern(): void {
+  confirmAction("Выйти за порог? История на этом закончится.", () => {
+    renderEnd("Ты уходишь в ночь. Здесь история заканчивается.");
+  });
+}
+
+function renderEnd(text: string): void {
+  const overlay = el(
+    "div",
+    { class: "defeat" },
+    el("p", { class: "defeat__text defeat__text--calm" }, text),
+  );
+  const back = el("button", { class: "btn btn--primary", type: "button" }, "В меню");
+  back.addEventListener("click", () => void renderMenu());
+  overlay.append(back);
+  root.append(overlay);
 }
 
 function renderDefeat(): void {
@@ -465,8 +635,8 @@ function renderDefeat(): void {
     { class: "defeat" },
     el("p", { class: "defeat__text" }, "Здесь твоя дорога обрывается."),
   );
-  const again = el("button", { class: "btn btn--primary", type: "button" }, "Начать заново");
-  again.addEventListener("click", () => void renderClassSelect());
+  const again = el("button", { class: "btn btn--primary", type: "button" }, "В меню");
+  again.addEventListener("click", () => void renderMenu());
   overlay.append(again);
   root.append(overlay);
 }
@@ -481,19 +651,19 @@ async function bootstrap(): Promise<void> {
   try {
     const st = await getState();
     if (st.player) {
-      player = st.player;
-      await renderPlay();
-      if (st.last_narrative) {
-        log.push({ who: "dm", text: st.last_narrative });
-        appendLog({ who: "dm", text: st.last_narrative });
-      }
-      if (st.player.game_over) renderDefeat();
+      const saved = localStorage.getItem(MODE_KEY) as Mode | null;
+      if (saved === "story" || saved === "combat" || saved === "tavern") mode = saved;
+      await renderMenu({
+        player: st.player,
+        lastNarrative: st.last_narrative ?? null,
+        gameOver: !!st.player.game_over,
+      });
       return;
     }
   } catch (e) {
     showError((e as Error).message);
   }
-  await renderClassSelect();
+  await renderMenu();
 }
 
 void bootstrap();
