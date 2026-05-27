@@ -208,19 +208,48 @@ body {
   display: none;
 }
 
-.charbar__new {
+.charbar__icon {
+  position: relative;
   background: transparent;
   border: 1px solid var(--color-surface);
-  color: var(--color-muted);
-  font-size: 0.72rem;
-  padding: 0.25rem 0.55rem;
-  border-radius: 7px;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  line-height: 1;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 9px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
 }
 
-.charbar__new:hover {
-  color: var(--color-text);
+.charbar__icon:hover {
   border-color: var(--color-ember);
+  transform: translateY(-1px);
+}
+
+.charbar__icon:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.charbar__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--color-ember);
+  color: oklch(18% 0.02 50);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
 }
 
 .hpbar {
@@ -284,28 +313,138 @@ body {
   }
 }
 
-.inventory {
-  padding: 0 var(--space);
+/* ---------- Оверлей: bottom sheet (инвентарь) и диалог (настройки) ---------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  background: oklch(8% 0.02 40 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background var(--duration) var(--ease),
+    backdrop-filter var(--duration) var(--ease);
 }
 
-.inventory__title {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+.overlay.is-open {
+  background: oklch(8% 0.02 40 / 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.sheet {
+  margin-top: auto;
+  width: 100%;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  max-height: 75%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.6rem var(--space) calc(var(--space) + env(safe-area-inset-bottom, 0px));
+  background: var(--color-bg-soft);
+  border-top: 1px solid var(--color-surface);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 40px oklch(0% 0 0 / 0.45);
+  transform: translateY(100%);
+  transition: transform var(--duration) var(--ease);
+}
+
+.overlay.is-open .sheet {
+  transform: translateY(0);
+}
+
+.sheet__grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--color-surface);
+  align-self: center;
+}
+
+.sheet__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.sheet__title {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  color: var(--color-ember);
+}
+
+.sheet__gold {
+  margin-left: auto;
+  color: var(--color-ember);
+  font-size: 0.85rem;
+}
+
+.sheet__body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sheet__empty {
   color: var(--color-muted);
-  margin-bottom: 0.2rem;
+  font-style: italic;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.dialog {
+  margin: auto;
+  width: calc(100% - 2 * var(--space));
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-surface);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px oklch(0% 0 0 / 0.5);
+  transform: scale(0.94);
+  opacity: 0;
+  transition:
+    transform var(--duration) var(--ease),
+    opacity var(--duration) var(--ease);
+}
+
+.overlay.is-open .dialog {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.dialog__title {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  color: var(--color-ember);
+}
+
+.dialog__hint {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.dialog__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .inv-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.35rem 0.5rem;
-  background: var(--color-bg-soft);
-  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-surface);
+  border-radius: 10px;
 }
 
 .inv-row.is-equipped {
@@ -333,8 +472,9 @@ body {
 
 .inv-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.3rem;
-  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .composer {

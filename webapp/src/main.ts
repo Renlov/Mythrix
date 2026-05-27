@@ -18,6 +18,7 @@ type LogEntry = { who: "player" | "dm"; text: string };
 const log: LogEntry[] = [];
 let player: PlayerView | null = null;
 let contextUsage = 0; // токены контекста последнего хода
+let refreshSheet: (() => void) | null = null; // перерисовка открытого инвентаря, если открыт
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -127,7 +128,6 @@ async function renderClassSelect(): Promise<void> {
 
 let logEl: HTMLElement;
 let barEl: HTMLElement;
-let invEl: HTMLElement;
 let input: HTMLTextAreaElement;
 let sendBtn: HTMLButtonElement;
 
@@ -140,9 +140,6 @@ async function renderPlay(): Promise<void> {
 
   logEl = el("section", { class: "log", "aria-label": "Повествование" });
   screen.append(logEl);
-
-  invEl = el("section", { class: "inventory" });
-  screen.append(invEl);
 
   const form = el("form", { class: "composer" });
   input = el("textarea", {
@@ -166,7 +163,6 @@ async function renderPlay(): Promise<void> {
 
   root.append(screen);
   renderBar();
-  renderInventory();
   for (const entry of log) appendLog(entry);
 }
 
@@ -186,30 +182,94 @@ function renderBar(): void {
       { class: "charbar__ctx", title: "Токенов контекста на последнем ходу" },
       contextUsage ? `${contextUsage} ток.` : "",
     ),
-    (() => {
-      const btn = el(
-        "button",
-        { class: "charbar__new", type: "button", title: "Начать новую игру" },
-        "Новая игра",
-      );
-      btn.addEventListener("click", () =>
-        confirmAction("Начать заново? Текущий прогресс будет потерян.", () => {
-          void renderClassSelect();
-        }),
-      );
-      return btn;
-    })(),
+    iconBtn("🎒", "Инвентарь", openInventory, player.inventory_items.length),
+    iconBtn("⚙", "Настройки", openSettings),
   );
 }
 
-function renderInventory(): void {
-  if (!player) return;
-  invEl.replaceChildren();
-  if (player.inventory_items.length === 0) return;
-  invEl.append(el("div", { class: "inventory__title" }, "Инвентарь"));
-  for (const it of player.inventory_items) {
-    invEl.append(renderInvRow(it));
-  }
+// Иконочная кнопка в charbar; badge — необязательный счётчик (например, число предметов).
+function iconBtn(
+  icon: string,
+  title: string,
+  onClick: () => void,
+  badge?: number,
+): HTMLButtonElement {
+  const btn = el(
+    "button",
+    { class: "charbar__icon", type: "button", title, "aria-label": title },
+    icon,
+  ) as HTMLButtonElement;
+  if (badge && badge > 0) btn.append(el("span", { class: "charbar__badge" }, String(badge)));
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+// Затемнённый оверлей с панелью (bottom sheet / диалог). Возвращает функцию закрытия.
+function openOverlay(panel: HTMLElement, onClose?: () => void): () => void {
+  const overlay = el("div", { class: "overlay" }, panel);
+  const close = (): void => {
+    overlay.classList.remove("is-open");
+    onClose?.();
+    setTimeout(() => overlay.remove(), 280);
+  };
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  root.append(overlay);
+  requestAnimationFrame(() => overlay.classList.add("is-open"));
+  return close;
+}
+
+// Инвентарь — выезжающий снизу bottom sheet.
+function openInventory(): void {
+  const body = el("div", { class: "sheet__body" });
+  const fill = (): void => {
+    body.replaceChildren();
+    if (!player || player.inventory_items.length === 0) {
+      body.append(el("p", { class: "sheet__empty" }, "Инвентарь пуст."));
+      return;
+    }
+    for (const it of player.inventory_items) body.append(renderInvRow(it));
+  };
+  fill();
+  refreshSheet = fill;
+
+  const panel = el(
+    "div",
+    { class: "sheet", role: "dialog", "aria-label": "Инвентарь" },
+    el("div", { class: "sheet__grip" }),
+    el(
+      "div",
+      { class: "sheet__head" },
+      el("h2", { class: "sheet__title" }, "Инвентарь"),
+      el("span", { class: "sheet__gold" }, player ? `${player.gold} зол.` : ""),
+    ),
+    body,
+  );
+  openOverlay(panel, () => {
+    refreshSheet = null;
+  });
+}
+
+// Настройки — диалог по кнопке-шестерёнке (пока: новая игра).
+function openSettings(): void {
+  const newBtn = el("button", { class: "btn btn--primary", type: "button" }, "Новая игра");
+  const closeBtn = el("button", { class: "btn btn--ghost", type: "button" }, "Закрыть");
+  const panel = el(
+    "div",
+    { class: "dialog", role: "dialog", "aria-label": "Настройки" },
+    el("h2", { class: "dialog__title" }, "Настройки"),
+    el("p", { class: "dialog__hint" }, "Новая игра сбросит текущий прогресс."),
+    el("div", { class: "dialog__actions" }, newBtn, closeBtn),
+  );
+  const close = openOverlay(panel);
+  closeBtn.addEventListener("click", close);
+  newBtn.addEventListener("click", () => {
+    close();
+    confirmAction("Начать заново? Текущий прогресс будет потерян.", () => {
+      void renderClassSelect();
+    });
+  });
 }
 
 // Действие над предметом: вызывает API, обновляет игрока и перерисовывает инвентарь.
@@ -222,7 +282,7 @@ async function invAction(
     const res = await run();
     player = res.player;
     renderBar();
-    renderInventory();
+    refreshSheet?.();
   } catch (e) {
     showError((e as Error).message);
     btn.removeAttribute("disabled");
@@ -336,7 +396,7 @@ function pushDm(narrative: string, gameOver: boolean): void {
   log.push({ who: "dm", text: narrative });
   appendLog({ who: "dm", text: narrative });
   renderBar();
-  renderInventory();
+  refreshSheet?.();
   if (gameOver) renderDefeat();
 }
 
