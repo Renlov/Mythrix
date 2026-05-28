@@ -245,7 +245,7 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
 
   // Боевой ход → расчёт на сервере + фаза 2 (нарратив исхода).
   // Боевым считается атака по присутствующей цели или применение расходника во время боя.
-  const combatIntent = events.intents.find(
+  let combatIntent = events.intents.find(
     (i) =>
       i.type === "attack" ||
       (i.type === "use_item" && player!.combat_session !== null),
@@ -253,11 +253,17 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
   let handledCombatIntent: typeof combatIntent | null = null;
   if (combatIntent) {
     let outcome = null;
-    if (
-      combatIntent.type === "attack" &&
-      (await targetPresent(env, player.location_id, String(combatIntent.target ?? "")))
-    ) {
-      outcome = await resolvePlayerAttack(env, player, combatIntent);
+    if (combatIntent.type === "attack") {
+      const realId = await resolveTargetId(
+        env,
+        player.location_id,
+        String(combatIntent.target ?? ""),
+      );
+      if (realId) {
+        // Подменяем target на канонический id из мира — combatFlow ждёт его.
+        combatIntent = { ...combatIntent, target: realId };
+        outcome = await resolvePlayerAttack(env, player, combatIntent);
+      }
     } else if (combatIntent.type === "use_item") {
       outcome = await resolveUseItemIntent(env, player, combatIntent);
     }
@@ -397,12 +403,27 @@ async function markAlliesHostile(env: Env, uid: string, targetId: string): Promi
   }
 }
 
-// Цель атаки должна присутствовать в текущей локации (NPC или враг).
-async function targetPresent(env: Env, locationId: string, targetId: string): Promise<boolean> {
-  if (!targetId) return false;
+// Ищет id цели в локации. Сначала прямое совпадение, потом по имени (fallback:
+// DM может вернуть «волк» или «трактирщик» вместо канонического id).
+// Возвращает реальный id из локации или null.
+async function resolveTargetId(
+  env: Env,
+  locationId: string,
+  raw: string,
+): Promise<string | null> {
+  if (!raw) return null;
   const loc = await db.getLocation(env, locationId);
-  if (!loc) return false;
-  return (loc.npcs?.includes(targetId) ?? false) || (loc.enemies?.includes(targetId) ?? false);
+  if (!loc) return null;
+  const ids = [...(loc.npcs ?? []), ...(loc.enemies ?? [])];
+  if (ids.includes(raw)) return raw;
+  const needle = raw.toLowerCase().trim();
+  for (const id of ids) {
+    const enemy = await db.getEnemy(env, id);
+    if (enemy && enemy.name.toLowerCase().includes(needle)) return id;
+    const npc = await db.getNpc(env, id);
+    if (npc && (npc.name?.toLowerCase().includes(needle) || npc.role_label?.toLowerCase().includes(needle))) return id;
+  }
+  return null;
 }
 
 async function equip(env: Env, uid: string, body: Record<string, unknown>): Promise<Response> {

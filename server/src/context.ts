@@ -60,7 +60,7 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
                     ? "дружелюбен"
                     : "нейтрален";
               return (
-                `- ${npcName(n)} (${n.role}, ${dispRu}): ${n.description}` +
+                `- ${n.id} — ${npcName(n)} (${n.role}, ${dispRu}): ${n.description}` +
                 (n.dialogue_style ? ` Стиль речи: ${n.dialogue_style}` : "")
               );
             })
@@ -73,7 +73,7 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
           deadNpcs
             .map(
               (n) =>
-                `- ${npcName(n)}: тело лежит на месте. Не двигается, не говорит, не реагирует. Можно обыскать.`,
+                `- ${n.id} — ${npcName(n)}: тело лежит на месте. Не двигается, не говорит, не реагирует. Можно обыскать.`,
             )
             .join("\n"),
       );
@@ -85,7 +85,10 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
         Boolean,
       );
       if (enemies.length) {
-        blocks.push(`[ВРАГИ]\n` + enemies.map((e) => `- ${e!.name}: ${e!.description}`).join("\n"));
+        blocks.push(
+          `[ВРАГИ]\n` +
+            enemies.map((e) => `- ${e!.id} — ${e!.name}: ${e!.description}`).join("\n"),
+        );
       }
     }
 
@@ -97,7 +100,8 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
     const npcItems = await db.getItems(env, aliveNpcItemIds);
     const lootItems = await db.getItems(env, deadNpcItemIds);
     const itemLine = (it: Item, where: string) =>
-      `- ${it.name} [${where}]: ${it.description}` + (it.price ? ` (цена: ${it.price})` : "");
+      `- ${it.id} — ${it.name} [${where}]: ${it.description}` +
+      (it.price ? ` (цена: ${it.price})` : "");
     const itemBlock = [
       ...playerItems.map((it) => itemLine(it, "у игрока")),
       ...locItems.map((it) => itemLine(it, "в локации")),
