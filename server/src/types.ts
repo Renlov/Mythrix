@@ -123,6 +123,9 @@ export interface CombatSession {
   enemyId: string;
   enemyHp: number;
   playerTurn: boolean;
+  // Ход игрока в этой фазе уже разрешён, ждём отдельного запроса /enemy-turn
+  // на ответный удар врага. Клиент шлёт его сам сразу после ответа /turn.
+  pendingEnemyTurn?: boolean;
 }
 
 export interface QuestProgress {

@@ -8,9 +8,11 @@ export interface CombatOutcome {
   turnResult: string; // блок [TURN RESULT] для фазы 2 (с числами, для DM)
 }
 
-// Разрешает атаку игрока по цели (враг или NPC с combat), затем ответный удар.
-// Возвращает обновлённое состояние игрока и текст [TURN RESULT].
-export async function resolveAttackIntent(
+// ФАЗА 1: разрешает удар игрока по цели. Ответный удар врага НЕ делается —
+// он отложен в combat_session.pendingEnemyTurn и будет разрешён отдельным
+// запросом /enemy-turn (см. resolveEnemyTurn). Это даёт два отдельных
+// сообщения в ленте: «удар игрока» и «удар врага».
+export async function resolvePlayerAttack(
   env: Env,
   player: PlayerState,
   intent: Intent,
@@ -20,23 +22,18 @@ export async function resolveAttackIntent(
   if (!targetId) return null;
 
   const targetStats = await targetCombatStats(env, targetId);
-  if (!targetStats) return null; // нет боевых характеристик → не механический бой
+  if (!targetStats) return null;
 
   const cfg = await db.getRulesetConfig(env);
   const cls = (await db.getClass(env, player.class_id)) ?? {};
-
-  // Параметры игрока.
-  const pAc = await playerArmorClass(env, player, cls, cfg);
   const pAttackBonus = (cls.attack_bonus as number) ?? 0;
   const weaponDie = (await equippedWeaponDie(env, player)) ?? (cfg.unarmed_die as string) ?? "d2";
 
-  // HP цели берём из combat_session (если бой продолжается) или из статов.
   const session =
     player.combat_session && player.combat_session.enemyId === targetId
       ? player.combat_session
       : { enemyId: targetId, enemyHp: targetStats.hp, playerTurn: true };
 
-  // Фаза игрока.
   const pr = resolveAttack(
     "player_main",
     targetId,
@@ -55,36 +52,67 @@ export async function resolveAttackIntent(
   );
 
   let p: PlayerState = { ...player };
-  const enemyHp = pr.targetHpAfter;
-
   if (pr.killed) {
     lines.push("Цель повержена.");
     p = { ...p, combat_session: null };
   } else {
-    // Ответный удар.
-    const er = enemyAttack(targetId, targetStats, pAc, p.hp, rng);
-    lines.push(
-      er.hit
-        ? `Противник попал (бросок ${er.roll}, урон ${er.damage}). Игрок HP ${er.targetHpAfter}/${p.max_hp}.`
-        : `Противник промахнулся (бросок ${er.roll}).`,
-    );
+    // Враг жив — отложим его ответный удар до /enemy-turn.
     p = {
       ...p,
-      hp: er.targetHpAfter,
-      combat_session: { enemyId: targetId, enemyHp, playerTurn: true },
+      combat_session: {
+        enemyId: targetId,
+        enemyHp: pr.targetHpAfter,
+        playerTurn: false,
+        pendingEnemyTurn: true,
+      },
     };
-    if (er.killed) {
-      lines.push("Игрок погиб.");
-      p = { ...p, combat_session: null };
-    }
   }
 
   return { player: p, turnResult: `[TURN RESULT]\n${lines.join("\n")}` };
 }
 
-// Применение расходника в бою — это ход игрока: лечение + ответный удар врага.
-// Возвращает null, если использовать нельзя (нет боя/предмета) — тогда intent
-// обработается обычным потоком applyEvents.
+// ФАЗА 2: ответный удар врага по игроку. Вызывается из /enemy-turn после
+// фазы игрока. Использует противника из combat_session.
+export async function resolveEnemyTurn(
+  env: Env,
+  player: PlayerState,
+  rng: Rng = makeRng(),
+): Promise<CombatOutcome | null> {
+  const session = player.combat_session;
+  if (!session || !session.pendingEnemyTurn) return null;
+  const stats = await targetCombatStats(env, session.enemyId);
+  if (!stats) return null;
+
+  const cfg = await db.getRulesetConfig(env);
+  const cls = (await db.getClass(env, player.class_id)) ?? {};
+  const pAc = await playerArmorClass(env, player, cls, cfg);
+  const er = enemyAttack(session.enemyId, stats, pAc, player.hp, rng);
+
+  const lines = [
+    er.hit
+      ? `Противник попал (бросок ${er.roll}, урон ${er.damage}). Игрок HP ${er.targetHpAfter}/${player.max_hp}.`
+      : `Противник промахнулся (бросок ${er.roll}).`,
+  ];
+
+  let p: PlayerState = {
+    ...player,
+    hp: er.targetHpAfter,
+    combat_session: {
+      enemyId: session.enemyId,
+      enemyHp: session.enemyHp,
+      playerTurn: true,
+      pendingEnemyTurn: false,
+    },
+  };
+  if (er.killed) {
+    lines.push("Игрок погиб.");
+    p = { ...p, combat_session: null };
+  }
+  return { player: p, turnResult: `[TURN RESULT]\n${lines.join("\n")}` };
+}
+
+// Применение расходника в бою — это ход игрока. Лечение происходит сейчас,
+// ответный удар откладывается до /enemy-turn (как и обычная атака).
 export async function resolveUseItemIntent(
   env: Env,
   player: PlayerState,
@@ -98,31 +126,15 @@ export async function resolveUseItemIntent(
   const use = await useItem(env, player, itemId, rng);
   if (use.error) return null;
 
-  const lines: string[] = [use.resultLine];
-  let p: PlayerState = use.player;
-
-  const session = p.combat_session;
-  if (session) {
-    const stats = await targetCombatStats(env, session.enemyId);
-    if (stats) {
-      const cfg = await db.getRulesetConfig(env);
-      const cls = (await db.getClass(env, p.class_id)) ?? {};
-      const pAc = await playerArmorClass(env, p, cls, cfg);
-      const er = enemyAttack(session.enemyId, stats, pAc, p.hp, rng);
-      lines.push(
-        er.hit
-          ? `Противник попал (бросок ${er.roll}, урон ${er.damage}). Игрок HP ${er.targetHpAfter}/${p.max_hp}.`
-          : `Противник промахнулся (бросок ${er.roll}).`,
-      );
-      p = { ...p, hp: er.targetHpAfter };
-      if (er.killed) {
-        lines.push("Игрок погиб.");
-        p = { ...p, combat_session: null };
+  const session = use.player.combat_session;
+  const p: PlayerState = session
+    ? {
+        ...use.player,
+        combat_session: { ...session, playerTurn: false, pendingEnemyTurn: true },
       }
-    }
-  }
+    : use.player;
 
-  return { player: p, turnResult: `[TURN RESULT]\n${lines.join("\n")}` };
+  return { player: p, turnResult: `[TURN RESULT]\n${use.resultLine}` };
 }
 
 async function playerArmorClass(

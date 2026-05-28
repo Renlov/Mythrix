@@ -366,6 +366,79 @@ body {
   padding: 0;
 }
 
+/* Боевой режим: тёплое сияние по краю и тонкая красная рамка у лога,
+   чтобы было понятно — идёт схватка. Не навязчиво, но заметно. */
+.screen--play.is-combat .log {
+  border-top: 1px solid oklch(50% 0.18 25 / 0.55);
+  background:
+    radial-gradient(ellipse at top, oklch(35% 0.12 25 / 0.18), transparent 60%),
+    var(--color-bg);
+  animation: combat-pulse 3.4s ease-in-out infinite;
+}
+
+@keyframes combat-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 transparent; }
+  50% { box-shadow: inset 0 8px 32px oklch(50% 0.2 25 / 0.18); }
+}
+
+/* Плашка противника. Скрыта вне боя, плавно появляется в бою. */
+.foebar {
+  display: none;
+}
+.screen--play.is-combat .foebar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem var(--space);
+  background: linear-gradient(180deg, oklch(22% 0.08 25 / 0.85), oklch(16% 0.02 30 / 0.85));
+  border-bottom: 1px solid oklch(45% 0.16 25 / 0.5);
+  position: sticky;
+  top: 3rem;
+  z-index: 2;
+  backdrop-filter: blur(8px);
+}
+.foebar__icon {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: oklch(30% 0.14 25 / 0.6);
+  color: oklch(92% 0.04 70);
+  font-size: 1.1rem;
+  border: 1px solid oklch(50% 0.16 25 / 0.7);
+}
+.foebar__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.foebar__name {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  color: oklch(94% 0.02 70);
+}
+.foebar__hp {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: oklch(20% 0.02 30);
+  overflow: hidden;
+}
+.foebar__hp-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, oklch(55% 0.22 25), oklch(65% 0.2 40));
+  transition: width 320ms ease-out;
+}
+.foebar__hpnum {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .charbar {
   display: flex;
   align-items: center;

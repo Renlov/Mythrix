@@ -5,7 +5,7 @@ import { chat, type ChatMessage } from "./deepseek.js";
 import { buildSystemPrompt, buildSceneContext } from "./context.js";
 import { parseDmResponse } from "./events.js";
 import { applyEvents } from "./apply.js";
-import { resolveAttackIntent, resolveUseItemIntent } from "./combatFlow.js";
+import { resolvePlayerAttack, resolveEnemyTurn, resolveUseItemIntent } from "./combatFlow.js";
 import { equipItem, unequipSlot, type EquipSlot } from "./equip.js";
 import { useItem, removeFromInventory } from "./inventory.js";
 import { summarizeOnExit } from "./memory.js";
@@ -80,6 +80,7 @@ export default {
       if (url.pathname === "/state") return await state(env, uid);
       if (url.pathname === "/new-game") return await newGame(env, uid, body);
       if (url.pathname === "/turn") return await turn(env, uid, body);
+      if (url.pathname === "/enemy-turn") return await enemyTurn(env, uid);
       if (url.pathname === "/equip") return await equip(env, uid, body);
       if (url.pathname === "/unequip") return await unequip(env, uid, body);
       if (url.pathname === "/use") return await use(env, uid, body);
@@ -256,7 +257,7 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
       combatIntent.type === "attack" &&
       (await targetPresent(env, player.location_id, String(combatIntent.target ?? "")))
     ) {
-      outcome = await resolveAttackIntent(env, player, combatIntent);
+      outcome = await resolvePlayerAttack(env, player, combatIntent);
     } else if (combatIntent.type === "use_item") {
       outcome = await resolveUseItemIntent(env, player, combatIntent);
     }
@@ -268,13 +269,11 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
         await markAlliesHostile(env, uid, targetId);
       }
       player = outcome.player;
-      if (player.hp <= 0) player = { ...player, game_over: true };
       // Если бой по NPC завершён победой игрока — отметить NPC мёртвым.
       if (
         combatIntent.type === "attack" &&
         targetId &&
-        player.combat_session === null &&
-        player.hp > 0
+        player.combat_session === null
       ) {
         const deadNpc = await db.getNpc(env, targetId);
         if (deadNpc) await db.setNpcAlive(env, uid, targetId, false);
@@ -285,7 +284,7 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
         { role: "assistant", content: parsed.narrative },
         {
           role: "user",
-          content: `${outcome.turnResult}\n\nОпиши исход боя по этим фактам. Без чисел. Только [NARRATIVE].`,
+          content: `${outcome.turnResult}\n\nОпиши только исход удара игрока. НЕ описывай ответный удар врага — он будет следующим ходом. Без чисел. Только [NARRATIVE].`,
         },
       ]);
       const p2 = parseDmResponse(phase2.content);
@@ -316,16 +315,70 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
   await db.setPlayerActivity(env, uid, now, nudgePlanned, pickHook(narrative, 0));
 
   // Бой завершён, если на этом ходу был разрешён боевой intent и сессия закрылась
-  // (враг повержен или игрок погиб). Клиент в режиме «Бой» по этому флагу выходит в меню.
+  // (враг повержен на фазе игрока). Игрок мог погибнуть только на /enemy-turn.
   const combatOver = handledCombatIntent !== null && player.combat_session === null;
+  // Сервер ждёт от клиента отдельного запроса /enemy-turn на ответный удар врага.
+  const awaitingEnemyTurn = player.combat_session?.pendingEnemyTurn === true;
 
   return json({
     narrative,
     player: await playerView(env, player),
     game_over: player.game_over,
     combat_over: combatOver,
+    awaiting_enemy_turn: awaitingEnemyTurn,
     warnings: applied.warnings,
     context_usage: usageTokens,
+  });
+}
+
+// Ответный удар врага после хода игрока. Считает урон, прогоняет фазу-2 нарратива
+// через DM (по [TURN RESULT]) и возвращает только нарратив + обновлённого игрока.
+async function enemyTurn(env: Env, uid: string): Promise<Response> {
+  let player = await db.getPlayer(env, uid);
+  if (!player) return json({ error: "no game" }, 409);
+  if (!player.combat_session?.pendingEnemyTurn) {
+    return json({ error: "no pending enemy turn" }, 409);
+  }
+
+  const outcome = await resolveEnemyTurn(env, player);
+  if (!outcome) return json({ error: "cannot resolve enemy turn" }, 500);
+  player = outcome.player;
+  if (player.hp <= 0) player = { ...player, game_over: true };
+
+  const system = buildSystemPrompt(player.name);
+  const sceneContext = await buildSceneContext(env, player);
+  const phase2 = await chat(env, [
+    { role: "system", content: system },
+    {
+      role: "user",
+      content: `${sceneContext}\n\n[ENEMY TURN]\n${outcome.turnResult}\n\nОпиши, как враг отвечает ударом по этим фактам. Без чисел. Только [NARRATIVE].`,
+    },
+  ]);
+  const p2 = parseDmResponse(phase2.content);
+  const narrative = (p2.narrative || phase2.content).trim();
+
+  await db.savePlayer(env, player);
+  const turnIndex = await db.nextTurnIndex(env, uid);
+  await db.appendTurn(
+    env,
+    uid,
+    turnIndex,
+    "[enemy_turn]",
+    narrative,
+    { intents: [], location_change: null, scene_ended: false, scene_summary: null },
+    phase2.usageTokens,
+    player.location_id,
+  );
+
+  const combatOver = player.combat_session === null;
+  return json({
+    narrative,
+    player: await playerView(env, player),
+    game_over: player.game_over,
+    combat_over: combatOver,
+    awaiting_enemy_turn: false,
+    warnings: [],
+    context_usage: phase2.usageTokens,
   });
 }
 
@@ -426,5 +479,33 @@ async function playerView(env: Env, p: PlayerState) {
     uses: it.uses,
     charges: it.type === "consumable" ? (p.item_charges[it.id] ?? it.uses ?? 1) : undefined,
   }));
-  return { ...publicPlayer(p), inventory_items };
+  const combat = await combatView(env, p);
+  return { ...publicPlayer(p), inventory_items, combat };
+}
+
+// Плашка боя для UI: имя/иконка противника + его HP. null, если боя нет.
+async function combatView(env: Env, p: PlayerState) {
+  const session = p.combat_session;
+  if (!session) return null;
+  const enemy = await db.getEnemy(env, session.enemyId);
+  if (enemy) {
+    return {
+      id: enemy.id,
+      name: enemy.name,
+      hp: session.enemyHp,
+      max_hp: enemy.hp,
+      kind: "enemy" as const,
+    };
+  }
+  const npc = await db.getNpc(env, session.enemyId);
+  if (npc?.combat) {
+    return {
+      id: npc.id,
+      name: npc.name,
+      hp: session.enemyHp,
+      max_hp: npc.combat.hp,
+      kind: "npc" as const,
+    };
+  }
+  return null;
 }

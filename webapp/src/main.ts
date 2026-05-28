@@ -4,6 +4,7 @@ import {
   getState,
   newGame,
   sendTurn,
+  enemyTurn,
   equip,
   unequip,
   useItem,
@@ -283,20 +284,25 @@ async function renderClassSelect(cta = "Войти в таверну"): Promise<
 
 // ---------- Игровой экран ----------
 
+let screenEl: HTMLElement;
 let logEl: HTMLElement;
 let barEl: HTMLElement;
+let foeEl: HTMLElement;
 let input: HTMLTextAreaElement;
 let sendBtn: HTMLButtonElement;
 
 async function renderPlay(): Promise<void> {
   clear();
-  const screen = el("main", { class: "screen screen--play" });
+  screenEl = el("main", { class: "screen screen--play" });
 
   barEl = el("header", { class: "charbar" });
-  screen.append(barEl);
+  screenEl.append(barEl);
+
+  foeEl = el("div", { class: "foebar", "aria-live": "polite" });
+  screenEl.append(foeEl);
 
   logEl = el("section", { class: "log", "aria-label": "Повествование" });
-  screen.append(logEl);
+  screenEl.append(logEl);
 
   const form = el("form", { class: "composer" });
   input = el("textarea", {
@@ -316,11 +322,37 @@ async function renderPlay(): Promise<void> {
       void submitAction();
     }
   });
-  screen.append(form);
+  screenEl.append(form);
 
-  root.append(screen);
+  root.append(screenEl);
   renderBar();
+  renderFoe();
   for (const entry of log) appendLog(entry);
+}
+
+// Плашка противника + боевой режим экрана. Если боя нет — плашка пустая,
+// класс `is-combat` снимается, чат снова в обычной стилизации.
+function renderFoe(): void {
+  if (!player) return;
+  const foe = player.combat;
+  screenEl.classList.toggle("is-combat", !!foe);
+  if (!foe) {
+    foeEl.replaceChildren();
+    return;
+  }
+  const pct = Math.max(0, Math.round((foe.hp / foe.max_hp) * 100));
+  const hpBar = el("span", { class: "foebar__hp", title: `HP ${foe.hp}/${foe.max_hp}` });
+  hpBar.append(el("span", { class: "foebar__hp-fill", style: `width:${pct}%` }));
+  foeEl.replaceChildren(
+    el("span", { class: `foebar__icon foebar__icon--${foe.kind}` }, "⚔"),
+    el(
+      "div",
+      { class: "foebar__body" },
+      el("span", { class: "foebar__name" }, foe.name),
+      hpBar,
+    ),
+    el("span", { class: "foebar__hpnum" }, `${foe.hp}/${foe.max_hp}`),
+  );
 }
 
 function renderBar(): void {
@@ -515,6 +547,7 @@ async function invAction(
     const res = await run();
     player = res.player;
     renderBar();
+    renderFoe();
     refreshSheet?.();
   } catch (e) {
     showError((e as Error).message);
@@ -617,6 +650,9 @@ async function submitAction(): Promise<void> {
     player = res.player;
     contextUsage = res.context_usage;
     pushDm(res.narrative, res.game_over, res.combat_over);
+    if (res.awaiting_enemy_turn && !res.game_over) {
+      await runEnemyTurn();
+    }
   } catch (e) {
     logEl.lastElementChild?.remove();
     showError((e as Error).message);
@@ -625,10 +661,27 @@ async function submitAction(): Promise<void> {
   }
 }
 
+// Фаза 2 боя: ответный удар врага. Отдельное сообщение в ленте.
+async function runEnemyTurn(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 700));
+  appendLog({ who: "dm", text: "…" });
+  try {
+    const res = await enemyTurn();
+    logEl.lastElementChild?.remove();
+    player = res.player;
+    contextUsage = res.context_usage;
+    pushDm(res.narrative, res.game_over, res.combat_over);
+  } catch (e) {
+    logEl.lastElementChild?.remove();
+    showError((e as Error).message);
+  }
+}
+
 function pushDm(narrative: string, gameOver: boolean, combatOver = false): void {
   log.push({ who: "dm", text: narrative });
   appendLog({ who: "dm", text: narrative });
   renderBar();
+  renderFoe();
   refreshSheet?.();
   if (gameOver) {
     renderDefeat();

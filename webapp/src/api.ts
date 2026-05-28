@@ -22,6 +22,14 @@ export interface InventoryItem {
   charges?: number; // оставшиеся заряды расходника
 }
 
+export interface CombatTarget {
+  id: string;
+  name: string;
+  hp: number;
+  max_hp: number;
+  kind: "enemy" | "npc";
+}
+
 export interface PlayerView {
   name: string;
   class_id: string;
@@ -34,6 +42,7 @@ export interface PlayerView {
   equipped: { weapon?: string; armor?: string };
   game_over: boolean;
   inventory_items: InventoryItem[];
+  combat: CombatTarget | null;
 }
 
 function initData(): string {
@@ -82,11 +91,14 @@ export interface TurnResponse {
   player: PlayerView;
   game_over: boolean;
   combat_over: boolean;
+  awaiting_enemy_turn?: boolean;
   warnings: string[];
   context_usage: number;
 }
 
 export const sendTurn = (action: string) => post<TurnResponse>("/turn", { action });
+
+export const enemyTurn = () => post<TurnResponse>("/enemy-turn", {});
 
 export const equip = (itemId: string) =>
   post<{ ok: boolean; player: PlayerView }>("/equip", { item_id: itemId });
