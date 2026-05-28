@@ -434,6 +434,13 @@ body {
   transition: width 500ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Плашка врага угасает после удара, добивающего его до 0 HP. */
+.screen--play.is-combat .foebar.is-dying {
+  opacity: 0.35;
+  filter: grayscale(0.8);
+  transition: opacity 500ms ease, filter 500ms ease;
+}
+
 /* Тряска плашки при получении урона. Снимается по animationend. */
 .foebar.is-hit,
 .hpbar.is-hit {

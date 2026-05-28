@@ -346,12 +346,28 @@ function pctOf(hp: number, max: number): number {
 function renderFoe(): void {
   if (!player) return;
   const foe = player.combat;
-  screenEl.classList.toggle("is-combat", !!foe);
   if (!foe) {
-    foeEl.replaceChildren();
+    // Враг умер: догоняем полоску HP до 0 и плавно убираем плашку, потом
+    // снимаем боевой режим экрана. Если плашки не было — просто чистим.
+    const fill = foeEl.querySelector<HTMLElement>(".foebar__hp-fill");
+    const hpnum = foeEl.querySelector<HTMLElement>(".foebar__hpnum");
+    if (fill && prevFoeHp !== null && prevFoeHp > 0) {
+      fill.style.width = "0%";
+      if (hpnum) hpnum.textContent = "0";
+      foeEl.classList.add("is-dying");
+      setTimeout(() => {
+        foeEl.replaceChildren();
+        foeEl.classList.remove("is-dying");
+        screenEl.classList.remove("is-combat");
+      }, 520);
+    } else {
+      foeEl.replaceChildren();
+      screenEl.classList.remove("is-combat");
+    }
     prevFoeHp = null;
     return;
   }
+  screenEl.classList.add("is-combat");
   const newPct = pctOf(foe.hp, foe.max_hp);
   const prevPct =
     prevFoeHp !== null ? pctOf(prevFoeHp, foe.max_hp) : newPct;
