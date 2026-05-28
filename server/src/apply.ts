@@ -62,9 +62,21 @@ async function applyIntent(
     }
     case "take_item": {
       if (!itemId) return p;
+      // Предмет берётся, если он в локации ИЛИ принадлежит мёртвому NPC здесь (обыск трупа).
       const locItems = await db.getItemsInLocation(env, p.location_id);
-      if (!locItems.some((it) => it.id === itemId))
-        return warn(p, warnings, `take_item: предмета нет в локации ${itemId}`);
+      let allowed = locItems.some((it) => it.id === itemId);
+      if (!allowed) {
+        const npcs = await db.getNpcsInLocation(env, p.location_id);
+        if (npcs.length) {
+          const states = await db.getNpcStates(env, p.telegram_user_id, npcs.map((n) => n.id));
+          const deadIds = new Set(states.filter((s) => !s.alive).map((s) => s.npc_id));
+          const corpseItemIds = new Set(
+            npcs.filter((n) => deadIds.has(n.id)).flatMap((n) => n.inventory ?? []),
+          );
+          allowed = corpseItemIds.has(itemId);
+        }
+      }
+      if (!allowed) return warn(p, warnings, `take_item: предмета нет в локации ${itemId}`);
       if (p.inventory.includes(itemId)) return p;
       return { ...p, inventory: [...p.inventory, itemId] };
     }

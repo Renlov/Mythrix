@@ -1,6 +1,11 @@
 import systemPromptTemplate from "../world/prompts/dm_system_v1.txt";
 import type { Env, PlayerState, Npc, Item } from "./types.js";
 import * as db from "./db.js";
+import {
+  partitionByAlive,
+  dispositionOf,
+  corpseInventoryIds,
+} from "./npcState.js";
 
 // Сколько последних ходов локации держим дословно в журнале (скользящее окно сцены).
 const LOCATION_JOURNAL_TURNS = 25;
@@ -39,43 +44,39 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
 
     // [NPCS] — присутствующие, с учётом состояния (жив/мёртв) и отношения.
     const npcs = await db.getNpcsInLocation(env, loc.id);
-    if (npcs.length) {
-      const states = await db.getNpcStates(env, player.telegram_user_id, npcs.map((n) => n.id));
-      const stateById = new Map(states.map((s) => [s.npc_id, s]));
-      const aliveNpcs = npcs.filter((n) => stateById.get(n.id)?.alive !== false);
-      const deadNpcs = npcs.filter((n) => stateById.get(n.id)?.alive === false);
-      if (aliveNpcs.length) {
-        blocks.push(
-          `[NPCS]\n` +
-            aliveNpcs
-              .map((n) => {
-                const st = stateById.get(n.id);
-                const disp = st?.disposition ?? n.disposition ?? "neutral";
-                const dispRu =
-                  disp === "hostile"
-                    ? "враждебен"
-                    : disp === "friendly"
-                      ? "дружелюбен"
-                      : "нейтрален";
-                return (
-                  `- ${npcName(n)} (${n.role}, ${dispRu}): ${n.description}` +
-                  (n.dialogue_style ? ` Стиль речи: ${n.dialogue_style}` : "")
-                );
-              })
-              .join("\n"),
-        );
-      }
-      if (deadNpcs.length) {
-        blocks.push(
-          `[МЁРТВЫЕ В СЦЕНЕ]\n` +
-            deadNpcs
-              .map(
-                (n) =>
-                  `- ${npcName(n)}: тело лежит на месте. Не двигается, не говорит, не реагирует. Можно обыскать.`,
-              )
-              .join("\n"),
-        );
-      }
+    const states = await db.getNpcStates(env, player.telegram_user_id, npcs.map((n) => n.id));
+    const stateById = new Map(states.map((s) => [s.npc_id, s]));
+    const { alive: aliveNpcs, dead: deadNpcs } = partitionByAlive(npcs, states);
+    if (aliveNpcs.length) {
+      blocks.push(
+        `[NPCS]\n` +
+          aliveNpcs
+            .map((n) => {
+              const disp = dispositionOf(n, stateById.get(n.id));
+              const dispRu =
+                disp === "hostile"
+                  ? "враждебен"
+                  : disp === "friendly"
+                    ? "дружелюбен"
+                    : "нейтрален";
+              return (
+                `- ${npcName(n)} (${n.role}, ${dispRu}): ${n.description}` +
+                (n.dialogue_style ? ` Стиль речи: ${n.dialogue_style}` : "")
+              );
+            })
+            .join("\n"),
+      );
+    }
+    if (deadNpcs.length) {
+      blocks.push(
+        `[МЁРТВЫЕ В СЦЕНЕ]\n` +
+          deadNpcs
+            .map(
+              (n) =>
+                `- ${npcName(n)}: тело лежит на месте. Не двигается, не говорит, не реагирует. Можно обыскать.`,
+            )
+            .join("\n"),
+      );
     }
 
     // [ВРАГИ]
@@ -89,10 +90,8 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
     }
 
     // [ITEMS] — у игрока, в локации, у живых NPC (на продажу), у мёртвых (при теле).
-    const states = await db.getNpcStates(env, player.telegram_user_id, npcs.map((n) => n.id));
-    const deadIds = new Set(states.filter((s) => !s.alive).map((s) => s.npc_id));
-    const aliveNpcItemIds = npcs.filter((n) => !deadIds.has(n.id)).flatMap((n) => n.inventory ?? []);
-    const deadNpcItemIds = npcs.filter((n) => deadIds.has(n.id)).flatMap((n) => n.inventory ?? []);
+    const aliveNpcItemIds = aliveNpcs.flatMap((n) => n.inventory ?? []);
+    const deadNpcItemIds = corpseInventoryIds(deadNpcs);
     const playerItems = await db.getItems(env, player.inventory);
     const locItems = await db.getItemsInLocation(env, loc.id);
     const npcItems = await db.getItems(env, aliveNpcItemIds);
