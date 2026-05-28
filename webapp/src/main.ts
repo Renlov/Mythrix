@@ -241,11 +241,19 @@ async function renderClassSelect(cta = "Войти в таверну"): Promise<
   }
   wrap.append(list);
 
-  const start = el("button", { class: "btn btn--primary", type: "button" }, cta);
-  start.addEventListener("click", async () => {
+  // Три кнопки локаций вместо одного CTA — выбор сцены прямо здесь.
+  wrap.append(el("h2", { class: "menu__heading" }, "Куда отправишься"));
+  const startRow = el("div", { class: "start-row" });
+  const startEntries: MenuEntry[] = [COMBAT, TAVERN, DUNGEON];
+  const startButtons: HTMLButtonElement[] = [];
+
+  const launch = async (entry: MenuEntry, btn: HTMLButtonElement): Promise<void> => {
+    mode = entry.mode;
+    pendingStart = entry.start;
     const name = nameInput.value.trim() || "Путник";
-    start.setAttribute("disabled", "true");
-    start.textContent = "…";
+    startButtons.forEach((b) => b.setAttribute("disabled", "true"));
+    const original = btn.textContent;
+    btn.textContent = "…";
     try {
       const res = await newGame(selected, name, pendingStart);
       localStorage.setItem(MODE_KEY, mode);
@@ -254,11 +262,24 @@ async function renderClassSelect(cta = "Войти в таверну"): Promise<
       await firstTurn();
     } catch (e) {
       showError((e as Error).message);
-      start.removeAttribute("disabled");
-      start.textContent = cta;
+      startButtons.forEach((b) => b.removeAttribute("disabled"));
+      btn.textContent = original;
     }
-  });
-  wrap.append(start);
+  };
+
+  for (const entry of startEntries) {
+    const btn = el(
+      "button",
+      { class: `start-tile ${entry.art}`, type: "button" },
+      el("span", { class: "start-tile__title" }, entry.title),
+      el("span", { class: "start-tile__desc" }, entry.desc),
+    );
+    btn.addEventListener("click", () => void launch(entry, btn));
+    startButtons.push(btn);
+    startRow.append(btn);
+  }
+  wrap.append(startRow);
+  void cta; // совместимость со старой сигнатурой — параметр больше не используется
 
   root.append(wrap);
 }

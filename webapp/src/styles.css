@@ -187,6 +187,50 @@ body {
   line-height: 1.45;
 }
 
+/* Кнопки-локации на экране старта (выбор сцены). */
+.start-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+}
+
+.start-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-surface);
+  border-radius: 14px;
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.start-tile:hover:not([disabled]) {
+  transform: translateY(-2px);
+  border-color: var(--color-ember);
+}
+
+.start-tile[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.start-tile__title {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  color: var(--color-ember);
+}
+
+.start-tile__desc {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  line-height: 1.45;
+}
+
 /* ---------- Старт ---------- */
 
 .screen--start {
