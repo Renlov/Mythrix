@@ -21,7 +21,7 @@ let refreshSheet: (() => void) | null = null; // перерисовка откр
 let invPage = 0; // активная страница пейджера инвентаря
 
 // Режим сессии задаётся пунктом меню и меняет точку старта и поведение выхода.
-type Mode = "story" | "combat" | "tavern";
+type Mode = "story" | "combat" | "tavern" | "dungeon";
 let mode: Mode = "story";
 let pendingStart: string | undefined; // start_location для выбранного режима
 const MODE_KEY = "mythrix_mode";
@@ -53,11 +53,19 @@ const COMBAT: MenuEntry = {
 };
 const TAVERN: MenuEntry = {
   mode: "tavern",
-  title: "Таверна «Последний привал»",
-  desc: "Последнее освещённое окно перед дорогой. Передохни у очага. Выйдешь за порог — история на этом закончится.",
+  title: "Таверна",
+  desc: "Магазин, дружелюбные и нейтральные NPC. Проверка диалогов и торговли.",
   cta: "Войти в таверну",
   start: undefined,
   art: "art--tavern",
+};
+const DUNGEON: MenuEntry = {
+  mode: "dungeon",
+  title: "Подземелье",
+  desc: "Заваленные шахты. NPC нет, врагов нет. Проверка того, как DM подталкивает игрока, когда непонятно, что делать.",
+  cta: "В подземелье",
+  start: "loc_collapsed_mines",
+  art: "art--dungeon",
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -132,8 +140,9 @@ async function renderMenu(resume: ResumeInfo | null = null): Promise<void> {
   wrap.append(el("h2", { class: "menu__heading" }, "Сюжеты"));
   wrap.append(storyCard(STORY));
 
+  wrap.append(el("h2", { class: "menu__heading" }, "Тестовые сцены"));
   const tiles = el("div", { class: "menu__tiles" });
-  tiles.append(modeTile(COMBAT), modeTile(TAVERN));
+  tiles.append(modeTile(COMBAT), modeTile(TAVERN), modeTile(DUNGEON));
   wrap.append(tiles);
 
   root.append(wrap);
@@ -454,21 +463,26 @@ function openInventory(): void {
 
 // Настройки — диалог по кнопке-шестерёнке (пока: новая игра).
 function openSettings(): void {
+  const menuBtn = el("button", { class: "btn btn--ghost", type: "button" }, "В меню");
   const newBtn = el("button", { class: "btn btn--primary", type: "button" }, "Новая игра");
   const closeBtn = el("button", { class: "btn btn--ghost", type: "button" }, "Закрыть");
   const panel = el(
     "div",
     { class: "dialog", role: "dialog", "aria-label": "Настройки" },
     el("h2", { class: "dialog__title" }, "Настройки"),
-    el("p", { class: "dialog__hint" }, "Новая игра сбросит текущий прогресс."),
-    el("div", { class: "dialog__actions" }, newBtn, closeBtn),
+    el("p", { class: "dialog__hint" }, "«В меню» — выйти к выбору сцены. «Новая игра» — сбросить текущий прогресс."),
+    el("div", { class: "dialog__actions" }, menuBtn, newBtn, closeBtn),
   );
   const close = openOverlay(panel);
   closeBtn.addEventListener("click", close);
+  menuBtn.addEventListener("click", () => {
+    close();
+    void renderMenu();
+  });
   newBtn.addEventListener("click", () => {
     close();
     confirmAction("Начать заново? Текущий прогресс будет потерян.", () => {
-      void renderClassSelect();
+      void renderMenu();
     });
   });
 }
@@ -652,7 +666,7 @@ async function bootstrap(): Promise<void> {
     const st = await getState();
     if (st.player) {
       const saved = localStorage.getItem(MODE_KEY) as Mode | null;
-      if (saved === "story" || saved === "combat" || saved === "tavern") mode = saved;
+      if (saved === "story" || saved === "combat" || saved === "tavern" || saved === "dungeon") mode = saved;
       await renderMenu({
         player: st.player,
         lastNarrative: st.last_narrative ?? null,
