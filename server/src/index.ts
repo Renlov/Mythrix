@@ -33,6 +33,25 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     // Публичный список классов (read-only контент, без авторизации).
     if (req.method === "GET" && url.pathname === "/classes") return await listClasses(env);
+    // Одноразовая регистрация webhook у Telegram. Авторизация — тот же секрет, что и сам webhook.
+    // Идёт через worker, чтобы не светить TELEGRAM_BOT_TOKEN наружу.
+    if (req.method === "POST" && url.pathname === "/admin/setup-webhook") {
+      const secret = req.headers.get("X-Setup-Secret");
+      if (secret !== env.TELEGRAM_WEBHOOK_SECRET) return json({ error: "forbidden" }, 403);
+      const workerOrigin = `${url.protocol}//${url.host}`;
+      const tgUrl = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`;
+      const res = await fetch(tgUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: `${workerOrigin}/telegram-webhook`,
+          secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+          allowed_updates: ["message"],
+        }),
+      });
+      const tgResult = (await res.json()) as Record<string, unknown>;
+      return json({ worker_webhook: `${workerOrigin}/telegram-webhook`, telegram: tgResult });
+    }
     // Telegram webhook: команды /start /play /resume. Авторизация — секретный заголовок.
     if (req.method === "POST" && url.pathname === "/telegram-webhook") {
       const secret = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
