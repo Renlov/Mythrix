@@ -124,6 +124,8 @@ async function renderMenu(resume: ResumeInfo | null = null): Promise<void> {
   clear();
   log.length = 0;
   player = null;
+  prevPlayerHp = null;
+  prevFoeHp = null;
 
   const wrap = el("main", { class: "screen screen--menu" });
   wrap.append(el("h1", { class: "title title--menu" }, "Mythrix"));
@@ -332,38 +334,89 @@ async function renderPlay(): Promise<void> {
 
 // Плашка противника + боевой режим экрана. Если боя нет — плашка пустая,
 // класс `is-combat` снимается, чат снова в обычной стилизации.
+// Запоминаем HP с прошлого рендера, чтобы CSS-transition «утекал» от старого
+// значения к новому, и чтобы понять, был ли удар (для тряски плашки).
+let prevFoeHp: number | null = null;
+let prevPlayerHp: number | null = null;
+
+function pctOf(hp: number, max: number): number {
+  return Math.max(0, Math.round((hp / Math.max(1, max)) * 100));
+}
+
 function renderFoe(): void {
   if (!player) return;
   const foe = player.combat;
   screenEl.classList.toggle("is-combat", !!foe);
   if (!foe) {
     foeEl.replaceChildren();
+    prevFoeHp = null;
     return;
   }
-  const pct = Math.max(0, Math.round((foe.hp / foe.max_hp) * 100));
-  const hpBar = el("span", { class: "foebar__hp", title: `HP ${foe.hp}/${foe.max_hp}` });
-  hpBar.append(el("span", { class: "foebar__hp-fill", style: `width:${pct}%` }));
-  foeEl.replaceChildren(
-    el("span", { class: `foebar__icon foebar__icon--${foe.kind}` }, "⚔"),
-    el(
-      "div",
-      { class: "foebar__body" },
-      el("span", { class: "foebar__name" }, foe.name),
-      hpBar,
-    ),
-    el("span", { class: "foebar__hpnum" }, `${foe.hp}/${foe.max_hp}`),
-  );
+  const newPct = pctOf(foe.hp, foe.max_hp);
+  const prevPct =
+    prevFoeHp !== null ? pctOf(prevFoeHp, foe.max_hp) : newPct;
+
+  // Полоска и число — переиспользуем DOM, если уже есть, чтобы анимация шла.
+  let fill = foeEl.querySelector<HTMLElement>(".foebar__hp-fill");
+  let hpnum = foeEl.querySelector<HTMLElement>(".foebar__hpnum");
+  let nameEl = foeEl.querySelector<HTMLElement>(".foebar__name");
+  if (!fill || !hpnum || !nameEl) {
+    const hpBar = el("span", { class: "foebar__hp", title: `HP ${foe.hp}/${foe.max_hp}` });
+    fill = el("span", { class: "foebar__hp-fill", style: `width:${prevPct}%` });
+    hpBar.append(fill);
+    nameEl = el("span", { class: "foebar__name" }, foe.name);
+    hpnum = el("span", { class: "foebar__hpnum" }, `${foe.hp}/${foe.max_hp}`);
+    foeEl.replaceChildren(
+      el("span", { class: `foebar__icon foebar__icon--${foe.kind}` }, "⚔"),
+      el("div", { class: "foebar__body" }, nameEl, hpBar),
+      hpnum,
+    );
+  } else {
+    nameEl.textContent = foe.name;
+    hpnum.textContent = `${foe.hp}/${foe.max_hp}`;
+    // Сначала фиксируем старое значение (если узел переехал), потом — новое в следующем кадре.
+    fill.style.width = `${prevPct}%`;
+  }
+  requestAnimationFrame(() => {
+    if (fill) fill.style.width = `${newPct}%`;
+  });
+
+  // Тряска плашки, когда HP врага упал.
+  if (prevFoeHp !== null && foe.hp < prevFoeHp) shake(foeEl);
+  prevFoeHp = foe.hp;
 }
+
+// Снимает класс по окончании анимации, чтобы повторный удар снова её запускал.
+function shake(node: HTMLElement): void {
+  node.classList.remove("is-hit");
+  // Перезапуск reflow, иначе браузер не заметит снятие/добавление в один кадр.
+  void node.offsetWidth;
+  node.classList.add("is-hit");
+  node.addEventListener("animationend", () => node.classList.remove("is-hit"), { once: true });
+}
+
+// Персистентный узел HP-полоски игрока: переиспользуется между renderBar,
+// чтобы width-transition анимировался от старого значения к новому.
+const playerHpEl: HTMLElement = el("span", { class: "hpbar" });
+const playerHpFill: HTMLElement = el("span", { class: "hpbar__fill", style: "width:100%" });
+playerHpEl.append(playerHpFill);
 
 function renderBar(): void {
   if (!player) return;
-  const pct = Math.max(0, Math.round((player.hp / player.max_hp) * 100));
-  const hp = el("span", { class: "hpbar", title: `HP ${player.hp}/${player.max_hp}` });
-  hp.append(el("span", { class: "hpbar__fill", style: `width:${pct}%` }));
+  const newPct = pctOf(player.hp, player.max_hp);
+  const prevPct =
+    prevPlayerHp !== null ? pctOf(prevPlayerHp, player.max_hp) : newPct;
+  playerHpEl.setAttribute("title", `HP ${player.hp}/${player.max_hp}`);
+  playerHpFill.style.width = `${prevPct}%`;
+  requestAnimationFrame(() => {
+    playerHpFill.style.width = `${newPct}%`;
+  });
+  if (prevPlayerHp !== null && player.hp < prevPlayerHp) shake(playerHpEl);
+  prevPlayerHp = player.hp;
 
   const parts: Node[] = [
     el("span", { class: "charbar__name" }, `${player.name} · ${player.class_id}`),
-    hp,
+    playerHpEl,
     el(
       "span",
       { class: "charbar__ctx", title: "Токенов контекста на последнем ходу" },
