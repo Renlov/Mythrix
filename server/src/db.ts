@@ -180,6 +180,78 @@ export async function clearPlayerProgress(env: Env, uid: string): Promise<void> 
   ]);
 }
 
+// --- Активность и напоминания ---
+
+// Обновляет «последний раз видели» и сбрасывает счётчик пушей — игрок вернулся.
+// nextNudgeAt задаётся отдельно (см. nudge.ts), null = не планировать.
+export async function setPlayerActivity(
+  env: Env,
+  uid: string,
+  lastSeenAt: number,
+  nextNudgeAt: number | null,
+  hook: string | null,
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE players SET last_seen_at=?, nudge_count=0, nudge_next_at=?, last_hook=?
+     WHERE telegram_user_id=?`,
+  )
+    .bind(lastSeenAt, nextNudgeAt, hook, uid)
+    .run();
+}
+
+export interface NudgeCandidate {
+  telegram_user_id: string;
+  name: string;
+  nudge_count: number;
+  last_seen_at: number;
+  last_hook: string | null;
+  game_over: boolean;
+}
+
+// Кому пора послать напоминание. Берём всех у кого nudge_next_at <= now и квота не выбрана.
+export async function getDueNudges(env: Env, now: number, limit = 100): Promise<NudgeCandidate[]> {
+  const res = await env.DB.prepare(
+    `SELECT telegram_user_id, name, nudge_count, last_seen_at, last_hook, game_over
+     FROM players
+     WHERE nudge_next_at IS NOT NULL AND nudge_next_at <= ? AND nudge_count < 3 AND game_over = 0
+     LIMIT ?`,
+  )
+    .bind(now, limit)
+    .all<{
+      telegram_user_id: string;
+      name: string;
+      nudge_count: number;
+      last_seen_at: number;
+      last_hook: string | null;
+      game_over: number;
+    }>();
+  return res.results.map((r) => ({ ...r, game_over: Boolean(r.game_over) }));
+}
+
+// Фиксирует факт отправки пуша: увеличивает счётчик, выставляет следующее время или NULL.
+export async function recordNudgeSent(
+  env: Env,
+  uid: string,
+  newCount: number,
+  nextAt: number | null,
+): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE players SET nudge_count=?, nudge_next_at=? WHERE telegram_user_id=?",
+  )
+    .bind(newCount, nextAt, uid)
+    .run();
+}
+
+// Последний нарратив игрока — нужен, чтобы достать зацепку для пуша.
+export async function getLastNarrative(env: Env, uid: string): Promise<string | null> {
+  const row = await env.DB.prepare(
+    "SELECT narrative FROM turns WHERE telegram_user_id=? ORDER BY turn_index DESC LIMIT 1",
+  )
+    .bind(uid)
+    .first<{ narrative: string }>();
+  return row?.narrative ?? null;
+}
+
 // --- NPC state (per-player) ---
 
 export async function getNpcStates(env: Env, uid: string, npcIds: string[]): Promise<NpcState[]> {

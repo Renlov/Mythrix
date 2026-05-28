@@ -101,8 +101,13 @@ CREATE TABLE IF NOT EXISTS players (
   known_npcs       TEXT NOT NULL DEFAULT '[]',   -- JSON array
   status_effects   TEXT NOT NULL DEFAULT '[]',   -- JSON array
   combat_session   TEXT,                         -- JSON или NULL
-  game_over        INTEGER NOT NULL DEFAULT 0    -- 1 = поражение, ходы заблокированы
+  game_over        INTEGER NOT NULL DEFAULT 0,   -- 1 = поражение, ходы заблокированы
+  last_seen_at     INTEGER NOT NULL DEFAULT 0,   -- ms: когда игрок последний раз касался /state или /turn
+  nudge_count      INTEGER NOT NULL DEFAULT 0,   -- сколько напоминаний уже отправлено в текущий простой
+  nudge_next_at    INTEGER,                      -- ms: когда планируется следующий пуш (NULL = не планируется)
+  last_hook        TEXT                          -- короткая зацепка из последнего хода для содержимого пуша
 );
+CREATE INDEX IF NOT EXISTS idx_players_nudge ON players(nudge_next_at) WHERE nudge_next_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS player_quests (
   telegram_user_id TEXT NOT NULL,

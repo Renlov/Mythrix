@@ -7,6 +7,8 @@ export interface Env {
   WORLD_ID: string;
   RULESET_ID: string;
   DEV_BYPASS_AUTH?: string; // "1" — обход проверки initData для локальной разработки
+  WEBAPP_URL: string;        // прод-URL Mini App (https://mythrix.pages.dev) — для кнопок в ботовых сообщениях
+  TELEGRAM_WEBHOOK_SECRET: string; // секрет для валидации webhook (X-Telegram-Bot-Api-Secret-Token)
 }
 
 export interface CombatStats {

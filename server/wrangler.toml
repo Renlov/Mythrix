@@ -24,3 +24,13 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-chat"
 WORLD_ID = "tavern"
 RULESET_ID = "dnd_v1"
+WEBAPP_URL = "https://mythrix.pages.dev"
+
+# TELEGRAM_WEBHOOK_SECRET — секрет для валидации Telegram webhook.
+#   wrangler secret put TELEGRAM_WEBHOOK_SECRET
+# После задания секрета поставить webhook (один раз):
+#   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<WORKER_URL>/telegram-webhook&secret_token=<SECRET>"
+
+# Cron Trigger — раз в час сканирует игроков, которым пора напомнить о возвращении.
+[triggers]
+crons = ["0 * * * *"]

@@ -9,6 +9,8 @@ import { resolveAttackIntent, resolveUseItemIntent } from "./combatFlow.js";
 import { equipItem, unequipSlot, type EquipSlot } from "./equip.js";
 import { useItem, removeFromInventory } from "./inventory.js";
 import { summarizeOnExit } from "./memory.js";
+import { firstNudgeAt, pickHook, shouldSendNudge, nextNudgeAt } from "./nudge.js";
+import { handleTelegramUpdate, sendNudge } from "./telegram.js";
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -31,6 +33,18 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     // Публичный список классов (read-only контент, без авторизации).
     if (req.method === "GET" && url.pathname === "/classes") return await listClasses(env);
+    // Telegram webhook: команды /start /play /resume. Авторизация — секретный заголовок.
+    if (req.method === "POST" && url.pathname === "/telegram-webhook") {
+      const secret = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
+      if (secret !== env.TELEGRAM_WEBHOOK_SECRET) return json({ error: "forbidden" }, 403);
+      try {
+        const update = (await req.json()) as Parameters<typeof handleTelegramUpdate>[1];
+        await handleTelegramUpdate(env, update);
+      } catch (e) {
+        return json({ error: (e as Error).message }, 500);
+      }
+      return json({ ok: true });
+    }
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
     let body: Record<string, unknown>;
@@ -56,7 +70,32 @@ export default {
       return json({ error: (e as Error).message }, 500);
     }
   },
+
+  // Cron Trigger: раз в час обходит игроков, которым пора напомнить.
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runNudgeScan(env));
+  },
 };
+
+async function runNudgeScan(env: Env): Promise<void> {
+  const now = Date.now();
+  const due = await db.getDueNudges(env, now);
+  for (const cand of due) {
+    const decision = shouldSendNudge({
+      game_over: cand.game_over,
+      nudge_count: cand.nudge_count,
+      nudge_next_at: now, // мы уже отфильтровали по времени в SQL
+      now,
+    });
+    if (!decision) continue;
+    const hook = cand.last_hook ?? pickHook(null, cand.nudge_count);
+    const ok = await sendNudge(env, cand.telegram_user_id, hook);
+    if (!ok) continue; // не сдвигаем расписание — попробуем в следующий cron-тик
+    const newCount = cand.nudge_count + 1;
+    const next = nextNudgeAt(cand.last_seen_at, newCount);
+    await db.recordNudgeSent(env, cand.telegram_user_id, newCount, next);
+  }
+}
 
 // Возвращает доверенный uid или null. Dev-обход — только при DEV_BYPASS_AUTH="1".
 async function authUid(env: Env, body: Record<string, unknown>): Promise<string | null> {
@@ -76,14 +115,14 @@ async function listClasses(env: Env): Promise<Response> {
 async function state(env: Env, uid: string): Promise<Response> {
   const player = await db.getPlayer(env, uid);
   if (!player) return json({ player: null });
-  const last = await env.DB.prepare(
-    "SELECT narrative FROM turns WHERE telegram_user_id=? ORDER BY turn_index DESC LIMIT 1",
-  )
-    .bind(uid)
-    .first<{ narrative: string }>();
+  const lastNarrative = await db.getLastNarrative(env, uid);
+  // Игрок открыл Mini App → фиксируем активность и планируем первый пуш на +24ч.
+  const now = Date.now();
+  const hook = pickHook(lastNarrative, 0);
+  await db.setPlayerActivity(env, uid, now, firstNudgeAt(now), hook);
   return json({
     player: await playerView(env, player),
-    last_narrative: last?.narrative ?? null,
+    last_narrative: lastNarrative,
     game_over: player.game_over,
   });
 }
@@ -252,6 +291,10 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
   await db.savePlayer(env, player);
   const turnIndex = await db.nextTurnIndex(env, uid);
   await db.appendTurn(env, uid, turnIndex, action, narrative, events, usageTokens, player.location_id);
+  // Игрок сделал ход → сбрасываем счётчик пушей, перепланируем первый на +24ч от сейчас.
+  const now = Date.now();
+  const nudgePlanned = player.game_over ? null : firstNudgeAt(now);
+  await db.setPlayerActivity(env, uid, now, nudgePlanned, pickHook(narrative, 0));
 
   // Бой завершён, если на этом ходу был разрешён боевой intent и сессия закрылась
   // (враг повержен или игрок погиб). Клиент в режиме «Бой» по этому флагу выходит в меню.

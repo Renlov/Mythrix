@@ -72,3 +72,80 @@ export async function validateInitData(
 
   return { ok: true, user };
 }
+
+// ============================================================
+// Bot API: отправка сообщений, обработка webhook-команд.
+// Документация: https://core.telegram.org/bots/api
+// ============================================================
+
+import type { Env } from "./types.js";
+
+const TG_API = (token: string, method: string) => `https://api.telegram.org/bot${token}/${method}`;
+
+interface TelegramUpdate {
+  message?: {
+    chat: { id: number };
+    from?: { id: number };
+    text?: string;
+  };
+}
+
+async function tgPost(env: Env, method: string, payload: unknown): Promise<void> {
+  await fetch(TG_API(env.TELEGRAM_BOT_TOKEN, method), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+// Кнопка-Mini App + текст. Используется и для /play, и для напоминаний.
+function miniAppReplyMarkup(env: Env, label = "Открыть Mythrix") {
+  return {
+    inline_keyboard: [[{ text: label, web_app: { url: env.WEBAPP_URL } }]],
+  };
+}
+
+// Webhook от Telegram: команды /start, /play, /resume — все шлют кнопку Mini App.
+export async function handleTelegramUpdate(env: Env, update: TelegramUpdate): Promise<void> {
+  const msg = update.message;
+  if (!msg?.text) return;
+  const text = msg.text.trim().toLowerCase();
+  if (text.startsWith("/start") || text.startsWith("/play") || text.startsWith("/resume")) {
+    await tgPost(env, "sendMessage", {
+      chat_id: msg.chat.id,
+      text:
+        text.startsWith("/resume")
+          ? "Продолжаем. Дверь открыта."
+          : "Mythrix готов. Открой Mini App и шагни в таверну.",
+      reply_markup: miniAppReplyMarkup(env),
+    });
+    // Постоянная кнопка Mini App в чате (рядом с полем ввода).
+    await tgPost(env, "setChatMenuButton", {
+      chat_id: msg.chat.id,
+      menu_button: {
+        type: "web_app",
+        text: "Играть",
+        web_app: { url: env.WEBAPP_URL },
+      },
+    });
+  }
+}
+
+// Напоминание игроку: отправляет личное сообщение от бота с зацепкой и кнопкой возврата.
+// Возвращает true, если Telegram принял сообщение.
+export async function sendNudge(env: Env, telegramUserId: string, hook: string): Promise<boolean> {
+  try {
+    const res = await fetch(TG_API(env.TELEGRAM_BOT_TOKEN, "sendMessage"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: Number(telegramUserId),
+        text: hook,
+        reply_markup: miniAppReplyMarkup(env, "Вернуться в Mythrix"),
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
