@@ -51,6 +51,17 @@ export interface Npc {
   knows_about?: string[];
   knowledge?: string[];
   combat?: CombatStats;
+  disposition?: NpcDisposition;        // дефолтное отношение к игроку
+  allies?: string[];                   // id NPC-союзников, которые вступятся, если игрок нападёт
+}
+
+export type NpcDisposition = "hostile" | "neutral" | "friendly";
+
+// Персональное состояние NPC для конкретного игрока (живой/мёртв, текущее отношение).
+export interface NpcState {
+  npc_id: string;
+  alive: boolean;
+  disposition: NpcDisposition | null;  // null = брать дефолт из Npc
 }
 
 export interface Item {

@@ -7,6 +7,8 @@ import type {
   QuestDef,
   PlayerState,
   QuestProgress,
+  NpcDisposition,
+  NpcState,
 } from "./types.js";
 
 const parse = <T>(s: string): T => JSON.parse(s) as T;
@@ -168,13 +170,60 @@ export async function savePlayer(env: Env, p: PlayerState): Promise<void> {
     .run();
 }
 
-// Полная очистка прогресса игрока (для «новой игры»): ходы, память локаций, квесты.
+// Полная очистка прогресса игрока (для «новой игры»): ходы, память локаций, квесты, состояния NPC.
 export async function clearPlayerProgress(env: Env, uid: string): Promise<void> {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM turns WHERE telegram_user_id=?").bind(uid),
     env.DB.prepare("DELETE FROM location_memory WHERE telegram_user_id=?").bind(uid),
     env.DB.prepare("DELETE FROM player_quests WHERE telegram_user_id=?").bind(uid),
+    env.DB.prepare("DELETE FROM npc_state WHERE telegram_user_id=?").bind(uid),
   ]);
+}
+
+// --- NPC state (per-player) ---
+
+export async function getNpcStates(env: Env, uid: string, npcIds: string[]): Promise<NpcState[]> {
+  if (npcIds.length === 0) return [];
+  const placeholders = npcIds.map(() => "?").join(",");
+  const res = await env.DB.prepare(
+    `SELECT npc_id, alive, disposition FROM npc_state
+     WHERE telegram_user_id=? AND npc_id IN (${placeholders})`,
+  )
+    .bind(uid, ...npcIds)
+    .all<{ npc_id: string; alive: number; disposition: string | null }>();
+  return res.results.map((r) => ({
+    npc_id: r.npc_id,
+    alive: r.alive !== 0,
+    disposition: (r.disposition as NpcDisposition | null) ?? null,
+  }));
+}
+
+export async function setNpcAlive(
+  env: Env,
+  uid: string,
+  npcId: string,
+  alive: boolean,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO npc_state (telegram_user_id, npc_id, alive, disposition) VALUES (?,?,?,NULL)
+     ON CONFLICT(telegram_user_id, npc_id) DO UPDATE SET alive=excluded.alive`,
+  )
+    .bind(uid, npcId, alive ? 1 : 0)
+    .run();
+}
+
+export async function setNpcDisposition(
+  env: Env,
+  uid: string,
+  npcId: string,
+  disposition: NpcDisposition,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO npc_state (telegram_user_id, npc_id, alive, disposition) VALUES (?,?,1,?)
+     ON CONFLICT(telegram_user_id, npc_id) DO UPDATE SET disposition=excluded.disposition`,
+  )
+    .bind(uid, npcId, disposition)
+    .run();
 }
 
 export async function getQuestProgress(env: Env, uid: string): Promise<QuestProgress[]> {

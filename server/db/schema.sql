@@ -112,6 +112,15 @@ CREATE TABLE IF NOT EXISTS player_quests (
   PRIMARY KEY (telegram_user_id, quest_id)
 );
 
+-- Персональное состояние NPC: жив/мёртв и текущее отношение к игроку.
+CREATE TABLE IF NOT EXISTS npc_state (
+  telegram_user_id TEXT NOT NULL,
+  npc_id           TEXT NOT NULL,
+  alive            INTEGER NOT NULL DEFAULT 1,   -- 0 = мёртв
+  disposition     TEXT,                          -- hostile|neutral|friendly | NULL (берём из карточки)
+  PRIMARY KEY (telegram_user_id, npc_id)
+);
+
 ----------------------------------------------------------------------
 -- Логи ходов (append-only).
 ----------------------------------------------------------------------

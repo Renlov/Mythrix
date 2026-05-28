@@ -37,19 +37,45 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
       blocks.push(`[ВЫХОДЫ] ${exits.join("; ")}`);
     }
 
-    // [NPCS] — только присутствующие
+    // [NPCS] — присутствующие, с учётом состояния (жив/мёртв) и отношения.
     const npcs = await db.getNpcsInLocation(env, loc.id);
     if (npcs.length) {
-      blocks.push(
-        `[NPCS]\n` +
-          npcs
-            .map(
-              (n) =>
-                `- ${npcName(n)} (${n.role}): ${n.description}` +
-                (n.dialogue_style ? ` Стиль речи: ${n.dialogue_style}` : ""),
-            )
-            .join("\n"),
-      );
+      const states = await db.getNpcStates(env, player.telegram_user_id, npcs.map((n) => n.id));
+      const stateById = new Map(states.map((s) => [s.npc_id, s]));
+      const aliveNpcs = npcs.filter((n) => stateById.get(n.id)?.alive !== false);
+      const deadNpcs = npcs.filter((n) => stateById.get(n.id)?.alive === false);
+      if (aliveNpcs.length) {
+        blocks.push(
+          `[NPCS]\n` +
+            aliveNpcs
+              .map((n) => {
+                const st = stateById.get(n.id);
+                const disp = st?.disposition ?? n.disposition ?? "neutral";
+                const dispRu =
+                  disp === "hostile"
+                    ? "враждебен"
+                    : disp === "friendly"
+                      ? "дружелюбен"
+                      : "нейтрален";
+                return (
+                  `- ${npcName(n)} (${n.role}, ${dispRu}): ${n.description}` +
+                  (n.dialogue_style ? ` Стиль речи: ${n.dialogue_style}` : "")
+                );
+              })
+              .join("\n"),
+        );
+      }
+      if (deadNpcs.length) {
+        blocks.push(
+          `[МЁРТВЫЕ В СЦЕНЕ]\n` +
+            deadNpcs
+              .map(
+                (n) =>
+                  `- ${npcName(n)}: тело лежит на месте. Не двигается, не говорит, не реагирует. Можно обыскать.`,
+              )
+              .join("\n"),
+        );
+      }
     }
 
     // [ВРАГИ]
@@ -62,17 +88,22 @@ export async function buildSceneContext(env: Env, player: PlayerState): Promise<
       }
     }
 
-    // [ITEMS] — у игрока, в локации, у присутствующих NPC
-    const npcItemIds = npcs.flatMap((n) => n.inventory ?? []);
+    // [ITEMS] — у игрока, в локации, у живых NPC (на продажу), у мёртвых (при теле).
+    const states = await db.getNpcStates(env, player.telegram_user_id, npcs.map((n) => n.id));
+    const deadIds = new Set(states.filter((s) => !s.alive).map((s) => s.npc_id));
+    const aliveNpcItemIds = npcs.filter((n) => !deadIds.has(n.id)).flatMap((n) => n.inventory ?? []);
+    const deadNpcItemIds = npcs.filter((n) => deadIds.has(n.id)).flatMap((n) => n.inventory ?? []);
     const playerItems = await db.getItems(env, player.inventory);
     const locItems = await db.getItemsInLocation(env, loc.id);
-    const npcItems = await db.getItems(env, npcItemIds);
+    const npcItems = await db.getItems(env, aliveNpcItemIds);
+    const lootItems = await db.getItems(env, deadNpcItemIds);
     const itemLine = (it: Item, where: string) =>
       `- ${it.name} [${where}]: ${it.description}` + (it.price ? ` (цена: ${it.price})` : "");
     const itemBlock = [
       ...playerItems.map((it) => itemLine(it, "у игрока")),
       ...locItems.map((it) => itemLine(it, "в локации")),
       ...npcItems.map((it) => itemLine(it, "на продажу")),
+      ...lootItems.map((it) => itemLine(it, "при теле")),
     ];
     if (itemBlock.length) blocks.push(`[ITEMS]\n${itemBlock.join("\n")}`);
   }

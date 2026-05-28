@@ -204,8 +204,23 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
     }
     if (outcome) {
       handledCombatIntent = combatIntent;
+      const targetId = String(combatIntent.target ?? "");
+      // Если атакован живой NPC — союзники сразу становятся враждебны (даже если он ещё не убит).
+      if (combatIntent.type === "attack" && targetId) {
+        await markAlliesHostile(env, uid, targetId);
+      }
       player = outcome.player;
       if (player.hp <= 0) player = { ...player, game_over: true };
+      // Если бой по NPC завершён победой игрока — отметить NPC мёртвым.
+      if (
+        combatIntent.type === "attack" &&
+        targetId &&
+        player.combat_session === null &&
+        player.hp > 0
+      ) {
+        const deadNpc = await db.getNpc(env, targetId);
+        if (deadNpc) await db.setNpcAlive(env, uid, targetId, false);
+      }
       const phase2 = await chat(env, [
         { role: "system", content: system },
         { role: "user", content: `${sceneContext}\n\n[PLAYER ACTION]\n${action}` },
@@ -250,6 +265,21 @@ async function turn(env: Env, uid: string, body: Record<string, unknown>): Promi
     warnings: applied.warnings,
     context_usage: usageTokens,
   });
+}
+
+// Союзники атакованного NPC переключаются на враждебное отношение.
+// Если атакован враг (enemy), а не NPC — ничего не делаем.
+async function markAlliesHostile(env: Env, uid: string, targetId: string): Promise<void> {
+  const npc = await db.getNpc(env, targetId);
+  if (!npc?.allies?.length) return;
+  for (const allyId of npc.allies) {
+    const ally = await db.getNpc(env, allyId);
+    if (!ally) continue;
+    // Если союзник уже мёртв — пропускаем.
+    const [state] = await db.getNpcStates(env, uid, [allyId]);
+    if (state && !state.alive) continue;
+    await db.setNpcDisposition(env, uid, allyId, "hostile");
+  }
 }
 
 // Цель атаки должна присутствовать в текущей локации (NPC или враг).
