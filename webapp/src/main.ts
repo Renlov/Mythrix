@@ -199,9 +199,6 @@ async function renderClassSelect(cta = "Войти в таверну"): Promise<
   player = null;
 
   const wrap = el("main", { class: "screen screen--start" });
-  const back = el("button", { class: "btn btn--ghost screen__back", type: "button" }, "← Меню");
-  back.addEventListener("click", () => void renderMenu());
-  wrap.append(back);
   wrap.append(el("h1", { class: "title" }, "Mythrix"));
   wrap.append(
     el("p", { class: "subtitle" }, "Последний привал. Дорога на север. Кто ты, путник?"),
@@ -498,12 +495,12 @@ function openSettings(): void {
   closeBtn.addEventListener("click", close);
   menuBtn.addEventListener("click", () => {
     close();
-    void renderMenu();
+    void renderClassSelect();
   });
   newBtn.addEventListener("click", () => {
     close();
     confirmAction("Начать заново? Текущий прогресс будет потерян.", () => {
-      void renderMenu();
+      void renderClassSelect();
     });
   });
 }
@@ -685,20 +682,22 @@ async function bootstrap(): Promise<void> {
 
   try {
     const st = await getState();
-    if (st.player) {
+    if (st.player && !st.player.game_over) {
+      // Есть незавершённая игра — сразу в игру, без промежуточного экрана.
       const saved = localStorage.getItem(MODE_KEY) as Mode | null;
       if (saved === "story" || saved === "combat" || saved === "tavern" || saved === "dungeon") mode = saved;
-      await renderMenu({
+      await resumePlay({
         player: st.player,
         lastNarrative: st.last_narrative ?? null,
-        gameOver: !!st.player.game_over,
+        gameOver: false,
       });
       return;
     }
   } catch (e) {
     showError((e as Error).message);
   }
-  await renderMenu();
+  // Нет игры (или была проигранная) — на стартовый экран с тремя кнопками сцен.
+  await renderClassSelect();
 }
 
 void bootstrap();
